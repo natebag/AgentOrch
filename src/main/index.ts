@@ -52,7 +52,9 @@ function buildCliLaunchCommand(config: AgentConfig, mcpConfigPath: string): stri
     parts.push(`--mcp-config "${mcpConfigPath}"`)
     if (config.autoMode) parts.push('--dangerously-skip-permissions')
   } else if (cliBase === 'codex') {
-    parts.push(`--config "${mcpConfigPath}"`)
+    // Codex --config is for key=value overrides, not MCP config files.
+    // TODO: Write MCP config to codex's config directory for proper integration.
+    // For now, codex launches without MCP (no inter-agent messaging).
     if (config.autoMode) parts.push('--yolo')
   } else if (cliBase === 'kimi') {
     parts.push(`--mcp-config "${mcpConfigPath}"`)
