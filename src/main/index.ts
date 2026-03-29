@@ -109,8 +109,15 @@ function setupMessageNudge(): void {
     if (!managed) return
 
     const nudge = `[AgentOrch] New message from "${msg.from}". Call get_messages() now to read it.`
-    // Single write with \r appended — this is what works for Claude
-    writeToPty(managed, nudge + '\r')
+    if (managed.config.cli === 'codex') {
+      // Codex needs the text and Enter as separate writes with a delay.
+      // Its TUI must fully render the input text before Enter triggers submit.
+      writeToPty(managed, nudge)
+      setTimeout(() => writeToPty(managed, '\r'), 2000)
+    } else {
+      // Claude/Kimi: single write with \r works
+      writeToPty(managed, nudge + '\r')
+    }
   }
 }
 
@@ -187,7 +194,12 @@ function setupIPC(): void {
         if (!hasReceivedInitialPrompt.has(config.id)) {
           hasReceivedInitialPrompt.add(config.id)
           const prompt = buildInitialPrompt(config)
-          writeToPty(managed, prompt + '\r')
+          if (config.cli === 'codex') {
+            writeToPty(managed, prompt)
+            setTimeout(() => writeToPty(managed, '\r'), 2000)
+          } else {
+            writeToPty(managed, prompt + '\r')
+          }
         }
       }, delay + CLI_LOAD_TIME)
     }
