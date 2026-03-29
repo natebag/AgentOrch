@@ -8,7 +8,11 @@ import type { AgentConfig } from '../shared/types'
 
 export function App(): React.ReactElement {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
-  const { windows, addWindow, removeWindow, focusWindow, minimizeWindow } = useWindowManager()
+  const {
+    windows, zoom, pan,
+    addWindow, removeWindow, focusWindow, minimizeWindow,
+    setZoom, setPan, updateWindowPosition, updateWindowSize, zoomToFit
+  } = useWindowManager()
   const { agents, spawnAgent, killAgent, getStatusColor } = useAgents()
 
   const handleSpawn = useCallback(async (config: Omit<AgentConfig, 'id'>) => {
@@ -45,10 +49,22 @@ export function App(): React.ReactElement {
         }
         e.preventDefault()
       }
+      // Ctrl+0 = reset zoom
+      if (e.ctrlKey && e.key === '0' && !e.shiftKey) {
+        setZoom(1.0)
+        setPan(0, 0)
+        e.preventDefault()
+      }
+      // Ctrl+Shift+0 = fit all
+      if (e.ctrlKey && e.key === ')') {
+        // Shift+0 produces ')' on most keyboards
+        zoomToFit(window.innerWidth, window.innerHeight - 44) // minus TopBar height
+        e.preventDefault()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [windows, focusWindow])
+  }, [windows, focusWindow, setZoom, setPan, zoomToFit])
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -60,9 +76,19 @@ export function App(): React.ReactElement {
       <Workspace
         windows={windows}
         agents={agents}
+        zoom={zoom}
+        pan={pan}
+        onSetZoom={setZoom}
+        onSetPan={setPan}
+        onZoomToFit={zoomToFit}
         onFocusWindow={focusWindow}
         onMinimizeWindow={minimizeWindow}
         onCloseWindow={handleClose}
+        onDragStop={updateWindowPosition}
+        onResizeStop={(id, x, y, w, h) => {
+          updateWindowPosition(id, x, y)
+          updateWindowSize(id, w, h)
+        }}
       />
       {showSpawnDialog && (
         <SpawnDialog

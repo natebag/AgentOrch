@@ -31,6 +31,13 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Disable Electron's built-in zoom shortcuts (we handle zoom in the renderer)
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.control && (input.key === '0' || input.key === '=' || input.key === '-')) {
+      _event.preventDefault()
+    }
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
