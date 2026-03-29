@@ -10,6 +10,7 @@ let hub: HubServer
 let mainWindow: BrowserWindow
 const agents = new Map<string, ManagedPty>()
 const messagePollers = new Map<string, ReturnType<typeof setInterval>>()
+const hasReceivedInitialPrompt = new Set<string>()
 
 // CLIs that natively support MCP (pull their own messages)
 // CLIs that pull their own messages via MCP get_messages() tool.
@@ -77,6 +78,18 @@ function buildCliLaunchCommands(config: AgentConfig, mcpConfigPath: string, mcpS
 
   // Custom CLIs: just run the command, no MCP
   return [cliBase]
+}
+
+// Build the initial prompt injected when the CLI first becomes ready.
+// Keeps it short so the agent doesn't waste context — just tells it who it is
+// and to check MCP tools for instructions.
+function buildInitialPrompt(config: AgentConfig): string {
+  const lines = [
+    `You are "${config.name}" (role: ${config.role}) in an AgentOrch workspace.`,
+    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes.`,
+    `Call read_ceo_notes() now for your instructions, then get_messages() to check for tasks from the orchestrator.`,
+  ]
+  return lines.join(' ')
 }
 
 // For non-MCP agents: poll for messages and inject them into the terminal stdin
@@ -153,6 +166,16 @@ function setupIPC(): void {
       onStatusChange: (status) => {
         hub.registry.updateStatus(config.name, status)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+
+        // When CLI first becomes active (at its prompt), inject the initial context.
+        // This fires AFTER the agent CLI is loaded and ready — not into raw PowerShell.
+        if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
+          hasReceivedInitialPrompt.add(config.id)
+          if (config.cli !== 'terminal') {
+            const prompt = buildInitialPrompt(config)
+            writeToPty(managed, prompt + '\r')
+          }
+        }
       }
     })
 
