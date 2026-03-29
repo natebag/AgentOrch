@@ -11,6 +11,7 @@ export interface AgentConfig {
   admin: boolean
   autoMode: boolean    // --dangerously-skip-permissions (Claude), --yolo (Codex), etc.
   promptRegex?: string
+  model?: string  // e.g. 'sonnet', 'opus', 'haiku', 'o4-mini', 'gpt-4.1'
 }
 
 export interface AgentState extends AgentConfig {
