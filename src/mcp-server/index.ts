@@ -3,12 +3,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 // Support both CLI args (for codex/kimi) and env vars (for claude).
-// CLI args: node index.js <port> <secret> <agent_id> <agent_name>
+// CLI args: node index.js <port> <secret> <agent_id> <agent_name...>
+// Agent name can contain spaces — everything from arg[3] onward is joined.
 const args = process.argv.slice(2)
 const HUB_PORT = args[0] || process.env.AGENTORCH_HUB_PORT
 const HUB_SECRET = args[1] || process.env.AGENTORCH_HUB_SECRET
 const AGENT_ID = args[2] || process.env.AGENTORCH_AGENT_ID
-const AGENT_NAME = args[3] || process.env.AGENTORCH_AGENT_NAME
+const AGENT_NAME = (args.length > 3 ? args.slice(3).join(' ') : undefined) || process.env.AGENTORCH_AGENT_NAME
 
 if (!HUB_PORT || !HUB_SECRET || !AGENT_ID || !AGENT_NAME) {
   console.error('AgentOrch MCP server: missing connection info.')
