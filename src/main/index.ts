@@ -108,14 +108,10 @@ function setupMessageNudge(): void {
     const managed = Array.from(agents.values()).find(a => a.config.name === msg.to)
     if (!managed) return
 
-    // Write the message text, then try multiple Enter variants after a delay.
-    // Different CLIs handle Enter differently in raw input mode:
-    // - PowerShell: \r
-    // - Claude Code / Codex / Kimi: may need \n or \r\n
     const nudge = `[AgentOrch] New message from "${msg.from}". Call get_messages() now to read it.`
     writeToPty(managed, nudge)
     setTimeout(() => {
-      writeToPty(managed, '\n')
+      writeToPty(managed, '\r\n')
     }, 300)
   }
 }
@@ -194,7 +190,7 @@ function setupIPC(): void {
           hasReceivedInitialPrompt.add(config.id)
           const prompt = buildInitialPrompt(config)
           writeToPty(managed, prompt)
-          setTimeout(() => writeToPty(managed, '\n'), 300)
+          setTimeout(() => writeToPty(managed, '\r\n'), 300)
         }
       }, delay + CLI_LOAD_TIME)
     }
