@@ -1,0 +1,37 @@
+import type Database from 'better-sqlite3'
+import type { PinboardTask } from '../hub/pinboard'
+
+export class PinboardStore {
+  private insertStmt: Database.Statement
+  private updateStmt: Database.Statement
+  private loadStmt: Database.Statement
+
+  constructor(private db: Database.Database) {
+    this.insertStmt = db.prepare(
+      `INSERT INTO pinboard_tasks (id, title, description, priority, status, claimed_by, result, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    this.updateStmt = db.prepare(
+      `UPDATE pinboard_tasks SET status = ?, claimed_by = ?, result = ? WHERE id = ?`
+    )
+    this.loadStmt = db.prepare(
+      `SELECT id, title, description, priority, status, claimed_by AS claimedBy, result, created_at AS createdAt
+       FROM pinboard_tasks ORDER BY created_at ASC`
+    )
+  }
+
+  saveTask(task: PinboardTask): void {
+    this.insertStmt.run(
+      task.id, task.title, task.description, task.priority,
+      task.status, task.claimedBy, task.result, task.createdAt
+    )
+  }
+
+  updateTask(task: PinboardTask): void {
+    this.updateStmt.run(task.status, task.claimedBy, task.result, task.id)
+  }
+
+  loadTasks(): PinboardTask[] {
+    return this.loadStmt.all() as PinboardTask[]
+  }
+}

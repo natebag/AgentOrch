@@ -2,14 +2,19 @@ import express from 'express'
 import type { Server } from 'http'
 import { AgentRegistry } from './agent-registry'
 import { MessageRouter } from './message-router'
+import { Pinboard } from './pinboard'
+import { InfoChannel } from './info-channel'
 import { generateSecret, validateSecret } from './auth'
-import { createRoutes } from './routes'
+import { createRoutes, type OutputAccessor } from './routes'
 
 export interface HubServer {
   port: number
   secret: string
   registry: AgentRegistry
   messages: MessageRouter
+  pinboard: Pinboard
+  infoChannel: InfoChannel
+  setOutputAccessor: (fn: OutputAccessor) => void
   close: () => void
 }
 
@@ -19,6 +24,8 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     const secret = generateSecret()
     const registry = new AgentRegistry()
     const messages = new MessageRouter(registry)
+    const pinboard = new Pinboard()
+    const infoChannel = new InfoChannel()
 
     app.use(express.json())
 
@@ -31,7 +38,8 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
       next()
     })
 
-    app.use(createRoutes(registry, messages))
+    const outputRef: { accessor: OutputAccessor | null } = { accessor: null }
+    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel))
 
     const server: Server = app.listen(preferredPort, '127.0.0.1', () => {
       const addr = server.address()
@@ -44,6 +52,9 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
         secret,
         registry,
         messages,
+        pinboard,
+        infoChannel,
+        setOutputAccessor: (fn) => { outputRef.accessor = fn },
         close: () => server.close()
       })
     })

@@ -6,9 +6,26 @@ interface TopBarProps {
   agents: AgentState[]
   onSpawnClick: () => void
   onAgentClick: (agentId: string) => void
+  pinboardOpen: boolean
+  onTogglePinboard: () => void
+  infoOpen: boolean
+  onToggleInfo: () => void
+  onPresetsClick: () => void
 }
 
-export function TopBar({ agents, onSpawnClick, onAgentClick }: TopBarProps): React.ReactElement {
+const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
+  height: '28px',
+  padding: '0 10px',
+  borderRadius: '5px',
+  border: active ? '1px solid #4a9eff' : '1px solid #444',
+  backgroundColor: active ? '#1e3a5f' : '#2a2a2a',
+  color: active ? '#8cc4ff' : '#999',
+  fontSize: '12px',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
+})
+
+export function TopBar({ agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, onPresetsClick }: TopBarProps): React.ReactElement {
   return (
     <div style={{
       height: '44px',
@@ -49,6 +66,12 @@ export function TopBar({ agents, onSpawnClick, onAgentClick }: TopBarProps): Rea
       {agents.length === 0 && (
         <span style={{ color: '#555', fontSize: '13px' }}>Click + to spawn an agent</span>
       )}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <button onClick={onTogglePinboard} style={toggleBtnStyle(pinboardOpen)}>Pinboard</button>
+        <button onClick={onToggleInfo} style={toggleBtnStyle(infoOpen)}>Info</button>
+        <div style={{ width: '1px', height: '24px', backgroundColor: '#333' }} />
+        <button onClick={onPresetsClick} style={toggleBtnStyle(false)}>Presets</button>
+      </div>
     </div>
   )
 }

@@ -74,4 +74,233 @@ describe('Hub HTTP Server', () => {
     const notes = await api('/agents/orchestrator/ceo-notes')
     expect(notes.body.ceoNotes).toBe('You lead.')
   })
+
+  it('broadcasts message to all agents except sender', async () => {
+    // Register additional agents for broadcast test
+    await api('/agents/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'a3', name: 'worker-2', cli: 'claude',
+        cwd: '/tmp', role: 'Worker', ceoNotes: 'Do tasks.', shell: 'powershell', admin: false, autoMode: false
+      })
+    })
+    await api('/agents/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'a4', name: 'worker-3', cli: 'claude',
+        cwd: '/tmp', role: 'Worker', ceoNotes: 'Do tasks.', shell: 'powershell', admin: false, autoMode: false
+      })
+    })
+
+    const broadcast = await api('/messages/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'orchestrator', message: 'all hands meeting now' })
+    })
+    expect(broadcast.status).toBe(200)
+    expect(broadcast.body.delivered).toBe(3) // worker-1, worker-2, worker-3
+    expect(broadcast.body.failed).toEqual([])
+
+    // Verify each worker received the message
+    const w1 = await api('/messages/worker-1')
+    expect(w1.body).toHaveLength(1)
+    expect(w1.body[0].message).toBe('all hands meeting now')
+    expect(w1.body[0].from).toBe('orchestrator')
+
+    const w2 = await api('/messages/worker-2')
+    expect(w2.body).toHaveLength(1)
+    expect(w2.body[0].message).toBe('all hands meeting now')
+
+    const w3 = await api('/messages/worker-3')
+    expect(w3.body).toHaveLength(1)
+    expect(w3.body[0].message).toBe('all hands meeting now')
+
+    // Verify orchestrator did NOT receive the message (excluded from broadcast)
+    const orch = await api('/messages/orchestrator')
+    expect(orch.body).toHaveLength(0)
+  })
+
+  it('returns 404 for output of unknown agent', async () => {
+    const res = await api('/agents/nonexistent/output')
+    expect(res.status).toBe(404)
+    expect(res.body.error).toContain('not found')
+  })
+
+  it('returns 503 when no output accessor is set', async () => {
+    // At this point no accessor has been wired up — should return 503
+    const res = await api('/agents/orchestrator/output')
+    expect(res.status).toBe(503)
+    expect(res.body.error).toContain('Output not available')
+  })
+
+  it('returns output lines when accessor is set', async () => {
+    // Wire up a mock output accessor
+    hub.setOutputAccessor((agentName, lines) => {
+      if (agentName === 'orchestrator') {
+        const allLines = ['line 1', 'line 2', 'line 3', 'line 4', 'line 5']
+        return allLines.slice(-lines)
+      }
+      return null
+    })
+
+    // Default 50 lines (returns all 5 since buffer only has 5)
+    const res = await api('/agents/orchestrator/output')
+    expect(res.status).toBe(200)
+    expect(res.body.lines).toEqual(['line 1', 'line 2', 'line 3', 'line 4', 'line 5'])
+    expect(res.body.count).toBe(5)
+
+    // Request specific line count
+    const res2 = await api('/agents/orchestrator/output?lines=3')
+    expect(res2.status).toBe(200)
+    expect(res2.body.lines).toEqual(['line 3', 'line 4', 'line 5'])
+    expect(res2.body.count).toBe(3)
+  })
+
+  it('returns 404 when agent exists but has no output buffer', async () => {
+    // worker-2 exists in registry but accessor returns null for it
+    hub.setOutputAccessor((_agentName, _lines) => null)
+
+    const res = await api('/agents/worker-2/output')
+    expect(res.status).toBe(404)
+    expect(res.body.error).toContain('No output buffer')
+  })
+})
+
+describe('Pinboard API', () => {
+  it('posts and reads tasks', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Fix tests', description: 'Unit tests are failing', priority: 'high' })
+    })
+    expect(post.status).toBe(200)
+    expect(post.body.id).toBeTruthy()
+    expect(post.body.title).toBe('Fix tests')
+
+    const list = await api('/pinboard/tasks')
+    expect(list.status).toBe(200)
+    expect(list.body.length).toBeGreaterThanOrEqual(1)
+    const task = list.body.find((t: any) => t.title === 'Fix tests')
+    expect(task).toBeTruthy()
+    expect(task.status).toBe('open')
+    expect(task.priority).toBe('high')
+  })
+
+  it('rejects post without title', async () => {
+    const res = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ description: 'No title' })
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('claims and completes a task', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Deploy', description: 'Deploy to prod' })
+    })
+    const taskId = post.body.id
+
+    const claim = await api(`/pinboard/tasks/${taskId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-1' })
+    })
+    expect(claim.status).toBe(200)
+    expect(claim.body.status).toBe('ok')
+
+    // Double-claim should fail
+    const claim2 = await api(`/pinboard/tasks/${taskId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-2' })
+    })
+    expect(claim2.status).toBe(409)
+
+    // Non-claimer can't complete
+    const badComplete = await api(`/pinboard/tasks/${taskId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-2' })
+    })
+    expect(badComplete.status).toBe(409)
+
+    // Claimer completes
+    const complete = await api(`/pinboard/tasks/${taskId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-1', result: 'Deployed successfully' })
+    })
+    expect(complete.status).toBe(200)
+    expect(complete.body.status).toBe('ok')
+
+    // Verify task state
+    const list = await api('/pinboard/tasks')
+    const task = list.body.find((t: any) => t.id === taskId)
+    expect(task.status).toBe('completed')
+    expect(task.result).toBe('Deployed successfully')
+    expect(task.claimedBy).toBe('worker-1')
+  })
+})
+
+describe('Info Channel API', () => {
+  it('posts and reads info entries', async () => {
+    const post = await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'agent-1', note: 'Research finding A', tags: ['research', 'alpha'] })
+    })
+    expect(post.status).toBe(200)
+    expect(post.body.id).toBeTruthy()
+    expect(post.body.note).toBe('Research finding A')
+    expect(post.body.tags).toEqual(['research', 'alpha'])
+    expect(post.body.from).toBe('agent-1')
+
+    const list = await api('/info')
+    expect(list.status).toBe(200)
+    expect(list.body.length).toBeGreaterThanOrEqual(1)
+    const entry = list.body.find((e: any) => e.note === 'Research finding A')
+    expect(entry).toBeTruthy()
+  })
+
+  it('rejects post without from or note', async () => {
+    const res1 = await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ note: 'No from' })
+    })
+    expect(res1.status).toBe(400)
+
+    const res2 = await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'agent-1' })
+    })
+    expect(res2.status).toBe(400)
+  })
+
+  it('reads info filtered by tags', async () => {
+    // Post entries with different tags
+    await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'agent-1', note: 'Bug fix 1', tags: ['bug'] })
+    })
+    await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'agent-2', note: 'Research 1', tags: ['research'] })
+    })
+    await api('/info', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'agent-3', note: 'Bug fix 2', tags: ['bug'] })
+    })
+
+    // Filter by 'bug' tag
+    const bugEntries = await api('/info?tags=bug')
+    expect(bugEntries.status).toBe(200)
+    expect(bugEntries.body.every((e: any) => e.tags.includes('bug'))).toBe(true)
+    expect(bugEntries.body.some((e: any) => e.note === 'Bug fix 1')).toBe(true)
+    expect(bugEntries.body.some((e: any) => e.note === 'Bug fix 2')).toBe(true)
+
+    // Filter by 'research' tag
+    const researchEntries = await api('/info?tags=research')
+    expect(researchEntries.status).toBe(200)
+    expect(researchEntries.body.every((e: any) => e.tags.includes('research'))).toBe(true)
+    expect(researchEntries.body.some((e: any) => e.note === 'Research 1')).toBe(true)
+
+    // Filter by multiple tags (matches ANY)
+    const multiEntries = await api('/info?tags=bug,research')
+    expect(multiEntries.status).toBe(200)
+    expect(multiEntries.body.length).toBeGreaterThanOrEqual(3)
+  })
 })

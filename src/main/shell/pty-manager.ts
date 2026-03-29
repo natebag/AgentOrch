@@ -19,6 +19,21 @@ interface SpawnOptions {
   onData: (data: string) => void
   onExit: (exitCode: number | undefined) => void
   onStatusChange: (status: AgentStatus) => void
+  onClearDetected?: () => void
+}
+
+function resolveShell(config: AgentConfig): string {
+  if (process.platform === 'win32') {
+    return config.shell === 'cmd' ? 'cmd.exe' : 'powershell.exe'
+  }
+
+  const shellMap: Partial<Record<AgentConfig['shell'], string>> = {
+    bash: '/bin/bash',
+    zsh: '/bin/zsh',
+    fish: '/usr/bin/fish'
+  }
+
+  return shellMap[config.shell] ?? process.env.SHELL ?? '/bin/bash'
 }
 
 export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
@@ -28,18 +43,20 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
 
   const statusDetector = new StatusDetector({
     promptRegex,
-    onChange: opts.onStatusChange
+    onChange: opts.onStatusChange,
+    onClearDetected: opts.onClearDetected
   })
 
   const outputBuffer = new OutputBuffer(1000)
-
-  const shell = process.platform === 'win32'
-    ? (opts.config.shell === 'powershell' ? 'powershell.exe' : 'cmd.exe')
-    : 'bash'
-
+  const shell = resolveShell(opts.config)
   const shellArgs: string[] = []
-  if (opts.config.admin && process.platform === 'win32') {
-    console.warn(`Agent "${opts.config.name}" requested admin elevation — UAC prompt may appear`)
+
+  if (opts.config.admin) {
+    if (process.platform === 'win32') {
+      console.warn(`Agent "${opts.config.name}" requested admin elevation - UAC prompt may appear`)
+    } else {
+      console.warn(`Agent "${opts.config.name}" requested admin elevation. Automatic sudo shell launch is not implemented; use a privileged shell if needed.`)
+    }
   }
 
   const ptyProcess = pty.spawn(shell, shellArgs, {

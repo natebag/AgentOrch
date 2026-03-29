@@ -7,7 +7,7 @@ export interface AgentConfig {
   cwd: string
   role: string
   ceoNotes: string
-  shell: 'cmd' | 'powershell'  // which shell to spawn the agent in
+  shell: 'cmd' | 'powershell' | 'bash' | 'zsh' | 'fish'  // which shell to spawn the agent in
   admin: boolean
   autoMode: boolean    // --dangerously-skip-permissions (Claude), --yolo (Codex), etc.
   promptRegex?: string
@@ -31,9 +31,26 @@ export interface SendMessageResult {
   detail?: string
 }
 
+export interface BroadcastResult {
+  delivered: number
+  failed: string[]
+  error?: string
+}
+
 export interface HubInfo {
   port: number
   secret: string
+}
+
+export interface PinboardTask {
+  id: string
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high'
+  status: 'open' | 'in_progress' | 'completed'
+  claimedBy: string | null
+  result: string | null
+  createdAt: string
 }
 
 export const IPC = {
@@ -44,5 +61,43 @@ export const IPC = {
   GET_HUB_INFO: 'hub:info',
   WRITE_TO_PTY: 'pty:write',
   PTY_OUTPUT: 'pty:output',
-  PTY_EXIT: 'pty:exit'
+  PTY_EXIT: 'pty:exit',
+  SAVE_PRESET: 'preset:save',
+  LOAD_PRESET: 'preset:load',
+  LIST_PRESETS: 'preset:list',
+  DELETE_PRESET: 'preset:delete',
+  PINBOARD_GET_TASKS: 'pinboard:get-tasks',
+  PINBOARD_TASK_UPDATE: 'pinboard:task-update',
+  INFO_GET_ENTRIES: 'info:get-entries',
+  INFO_ENTRY_ADDED: 'info:entry-added'
 } as const
+
+export interface InfoEntry {
+  id: string
+  from: string
+  note: string
+  tags: string[]
+  createdAt: string
+}
+
+export interface WindowPosition {
+  agentName: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface CanvasState {
+  zoom: number
+  panX: number
+  panY: number
+}
+
+export interface WorkspacePreset {
+  name: string
+  agents: AgentConfig[]
+  windows: WindowPosition[]
+  canvas: CanvasState
+  savedAt: string
+}

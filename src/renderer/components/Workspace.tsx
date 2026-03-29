@@ -1,9 +1,18 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react'
 import { FloatingWindow } from './FloatingWindow'
+import { SnapPreview } from './SnapPreview'
 import { TerminalWindow } from './TerminalWindow'
+import { PinboardPanel } from './PinboardPanel'
+import { InfoChannelPanel } from './InfoChannelPanel'
 import { ZoomControls } from './ZoomControls'
 import type { WindowState } from '../hooks/useWindowManager'
 import type { AgentState } from '../../shared/types'
+import type { SnapBounds, SnapZoneInfo } from '../hooks/useSnapZones'
+
+const PANEL_IDS: Record<string, string> = {
+  '__pinboard__': 'pinboard',
+  '__info__': 'info'
+}
 
 const STATUS_COLORS: Record<string, string> = {
   idle: '#888',
@@ -47,6 +56,9 @@ export function Workspace({
   const [transitionEnabled, setTransitionEnabled] = useState(false)
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [maximizedId, setMaximizedId] = useState<string | null>(null)
+  const [snapPreview, setSnapPreview] = useState<SnapZoneInfo | null>(null)
+  const [workspaceSize, setWorkspaceSize] = useState({ width: 0, height: 0 })
+  const [restoreBoundsById, setRestoreBoundsById] = useState<Map<string, SnapBounds>>(new Map())
 
   // Clean up maximizedId if the window is removed
   useEffect(() => {
@@ -54,6 +66,40 @@ export function Workspace({
       setMaximizedId(null)
     }
   }, [windows, maximizedId])
+
+  useEffect(() => {
+    const activeIds = new Set(windows.map(window => window.id))
+    setRestoreBoundsById(prev => {
+      let changed = false
+      const next = new Map<string, SnapBounds>()
+      for (const [id, bounds] of prev) {
+        if (activeIds.has(id)) {
+          next.set(id, bounds)
+        } else {
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [windows])
+
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+
+    const updateSize = () => {
+      setWorkspaceSize({
+        width: el.clientWidth,
+        height: el.clientHeight
+      })
+    }
+
+    updateSize()
+
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Use refs for zoom/pan so the native wheel handler stays current
   const zoomRef = useRef(zoom)
@@ -129,6 +175,25 @@ export function Workspace({
     setMaximizedId(prev => prev === id ? null : id)
   }, [])
 
+  const clearSnapState = useCallback((id: string) => {
+    setRestoreBoundsById(prev => {
+      if (!prev.has(id)) return prev
+      const next = new Map(prev)
+      next.delete(id)
+      return next
+    })
+  }, [])
+
+  const handleSnap = useCallback((id: string, bounds: SnapBounds, restoreBounds: SnapBounds) => {
+    setRestoreBoundsById(prev => {
+      const next = new Map(prev)
+      next.set(id, restoreBounds)
+      return next
+    })
+    onResizeStop(id, bounds.x, bounds.y, bounds.width, bounds.height)
+    setSnapPreview(null)
+  }, [onResizeStop])
+
   const handleFitAll = useCallback(() => {
     if (!viewportRef.current) return
     const rect = viewportRef.current.getBoundingClientRect()
@@ -172,11 +237,21 @@ export function Workspace({
         }}
       >
         {windows.map(win => {
-          const agent = agents.find(a => a.id === win.id)
+          const panelType = PANEL_IDS[win.id]
+          const agent = !panelType ? agents.find(a => a.id === win.id) : undefined
           const statusColor = agent ? STATUS_COLORS[agent.status] ?? '#888' : undefined
           const title = agent
             ? `${agent.name} (${agent.cli}) \u00B7 ${agent.role}`
             : win.title
+
+          let content: React.ReactNode
+          if (panelType === 'pinboard') {
+            content = <PinboardPanel />
+          } else if (panelType === 'info') {
+            content = <InfoChannelPanel />
+          } else {
+            content = <TerminalWindow agentId={win.id} />
+          }
 
           return (
             <FloatingWindow
@@ -189,22 +264,36 @@ export function Workspace({
               width={win.width}
               height={win.height}
               zoom={zoom}
+              pan={pan}
               zIndex={win.zIndex}
               minimized={win.minimized}
               maximized={maximizedId === win.id}
+              workspaceWidth={workspaceSize.width}
+              workspaceHeight={workspaceSize.height}
+              restoreBounds={restoreBoundsById.get(win.id) ?? null}
               viewportRef={viewportRef}
               onFocus={() => onFocusWindow(win.id)}
               onMinimize={() => onMinimizeWindow(win.id)}
               onMaximize={() => handleMaximize(win.id)}
               onClose={() => onCloseWindow(win.id)}
-              onDragStop={(nx, ny) => onDragStop(win.id, nx, ny)}
-              onResizeStop={(nx, ny, w, h) => onResizeStop(win.id, nx, ny, w, h)}
+              onDragStop={(nx, ny) => {
+                clearSnapState(win.id)
+                onDragStop(win.id, nx, ny)
+              }}
+              onResizeStop={(nx, ny, w, h) => {
+                clearSnapState(win.id)
+                onResizeStop(win.id, nx, ny, w, h)
+              }}
+              onSnapPreviewChange={setSnapPreview}
+              onSnap={(bounds, restoreBounds) => handleSnap(win.id, bounds, restoreBounds)}
             >
-              <TerminalWindow agentId={win.id} />
+              {content}
             </FloatingWindow>
           )
         })}
       </div>
+
+      <SnapPreview bounds={snapPreview?.bounds ?? null} />
 
       {/* Zoom controls — outside canvas transform */}
       <ZoomControls

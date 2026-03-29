@@ -22,6 +22,9 @@ const CLI_PRESETS = [
   { label: 'Custom', value: '' }
 ]
 
+const WINDOWS_SHELLS: AgentConfig['shell'][] = ['powershell', 'cmd']
+const POSIX_SHELLS: AgentConfig['shell'][] = ['bash', 'zsh', 'fish']
+
 export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.ReactElement {
   const [name, setName] = useState('')
   const [cli, setCli] = useState('claude')
@@ -30,7 +33,9 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   const [role, setRole] = useState('worker')
   const [customRole, setCustomRole] = useState('')
   const [ceoNotes, setCeoNotes] = useState('')
-  const [shell, setShell] = useState<'cmd' | 'powershell'>('powershell')
+  const isWindows = navigator.platform.toLowerCase().includes('win')
+  const shellOptions = isWindows ? WINDOWS_SHELLS : POSIX_SHELLS
+  const [shell, setShell] = useState<AgentConfig['shell']>(isWindows ? 'powershell' : 'bash')
   const [admin, setAdmin] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -40,6 +45,10 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   useEffect(() => {
     window.electronAPI.getCwd().then(setCwd)
   }, [])
+
+  useEffect(() => {
+    setShell(prev => shellOptions.includes(prev) ? prev : shellOptions[0])
+  }, [isWindows])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,11 +177,19 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
           <>
             <label style={labelStyle}>
               Shell
-              <select value={shell} onChange={e => setShell(e.target.value as 'cmd' | 'powershell')} style={inputStyle}>
-                <option value="powershell">PowerShell</option>
-                <option value="cmd">Command Prompt (cmd)</option>
+              <select value={shell} onChange={e => setShell(e.target.value as AgentConfig['shell'])} style={inputStyle}>
+                {shellOptions.map(option => (
+                  <option key={option} value={option}>
+                    {option === 'powershell' ? 'PowerShell' :
+                     option === 'cmd' ? 'Command Prompt (cmd)' :
+                     option === 'bash' ? 'Bash' :
+                     option === 'zsh' ? 'Zsh' : 'Fish'}
+                  </option>
+                ))}
               </select>
-              <span style={{ color: '#555', fontSize: '11px' }}>Use cmd if a CLI isn't found in PowerShell</span>
+              <span style={{ color: '#555', fontSize: '11px' }}>
+                {isWindows ? 'Use cmd if a CLI is not found in PowerShell' : 'Pick the shell that matches your local CLI setup'}
+              </span>
             </label>
             <label style={labelStyle}>
               Prompt Regex Override

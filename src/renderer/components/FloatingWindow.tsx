@@ -1,6 +1,7 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Rnd } from 'react-rnd'
+import { Rnd, type DraggableData, type RndDragEvent } from 'react-rnd'
+import { getSnapZone, type SnapBounds, type SnapZoneInfo } from '../hooks/useSnapZones'
 
 interface FloatingWindowProps {
   id: string
@@ -11,9 +12,13 @@ interface FloatingWindowProps {
   width: number
   height: number
   zoom: number
+  pan: { x: number; y: number }
   zIndex: number
   minimized: boolean
   maximized: boolean
+  workspaceWidth: number
+  workspaceHeight: number
+  restoreBounds?: SnapBounds | null
   viewportRef?: React.RefObject<HTMLDivElement | null>
   onFocus: () => void
   onMinimize: () => void
@@ -21,6 +26,8 @@ interface FloatingWindowProps {
   onClose: () => void
   onDragStop: (x: number, y: number) => void
   onResizeStop: (x: number, y: number, width: number, height: number) => void
+  onSnapPreviewChange: (info: SnapZoneInfo | null) => void
+  onSnap: (bounds: SnapBounds, restoreBounds: SnapBounds) => void
   children: React.ReactNode
 }
 
@@ -33,9 +40,13 @@ export function FloatingWindow({
   width,
   height,
   zoom,
+  pan,
   zIndex,
   minimized,
   maximized,
+  workspaceWidth,
+  workspaceHeight,
+  restoreBounds,
   viewportRef,
   onFocus,
   onMinimize,
@@ -43,24 +54,82 @@ export function FloatingWindow({
   onClose,
   onDragStop,
   onResizeStop,
+  onSnapPreviewChange,
+  onSnap,
   children
 }: FloatingWindowProps): React.ReactElement | null {
+  const [dragSizeOverride, setDragSizeOverride] = useState<{ width: number; height: number } | null>(null)
+
   if (minimized) return null
 
   // Rnd lives inside the CSS-transformed canvas. Positions are in canvas space.
   // CSS scale(zoom) handles visual scaling. No manual * zoom needed.
-  const handleDragStop = useCallback((_e: any, data: { x: number; y: number }) => {
+  const displayWidth = dragSizeOverride?.width ?? width
+  const displayHeight = dragSizeOverride?.height ?? height
+
+  const getSnapInfo = useCallback((event: RndDragEvent): SnapZoneInfo | null => {
+    if (!viewportRef?.current) return null
+
+    const point = 'touches' in event
+      ? event.touches[0] ?? event.changedTouches[0]
+      : event
+    if (!point) return null
+
+    const rect = viewportRef.current.getBoundingClientRect()
+    const mouseX = point.clientX - rect.left
+    const mouseY = point.clientY - rect.top
+    return getSnapZone(mouseX, mouseY, workspaceWidth, workspaceHeight)
+  }, [viewportRef, workspaceWidth, workspaceHeight])
+
+  const activeRestoreBounds = useMemo(() => {
+    if (restoreBounds) return restoreBounds
+    return { x, y, width: displayWidth, height: displayHeight }
+  }, [restoreBounds, x, y, displayWidth, displayHeight])
+
+  const handleDragStart = useCallback(() => {
+    if (restoreBounds) {
+      setDragSizeOverride({ width: restoreBounds.width, height: restoreBounds.height })
+    }
+  }, [restoreBounds])
+
+  const handleDrag = useCallback((e: RndDragEvent) => {
+    onSnapPreviewChange(getSnapInfo(e))
+  }, [getSnapInfo, onSnapPreviewChange])
+
+  const handleDragStop = useCallback((e: RndDragEvent, data: DraggableData) => {
+    const snapInfo = getSnapInfo(e)
+    onSnapPreviewChange(null)
+
+    if (snapInfo) {
+      setDragSizeOverride(null)
+      onSnap({
+        x: (snapInfo.bounds.x - pan.x) / zoom,
+        y: (snapInfo.bounds.y - pan.y) / zoom,
+        width: snapInfo.bounds.width / zoom,
+        height: snapInfo.bounds.height / zoom
+      }, activeRestoreBounds)
+      return
+    }
+
+    if (dragSizeOverride) {
+      onResizeStop(data.x, data.y, dragSizeOverride.width, dragSizeOverride.height)
+      setDragSizeOverride(null)
+      return
+    }
+
     onDragStop(data.x, data.y)
-  }, [onDragStop])
+  }, [activeRestoreBounds, dragSizeOverride, getSnapInfo, onDragStop, onResizeStop, onSnap, onSnapPreviewChange, pan.x, pan.y, zoom])
 
   const handleResizeStop = useCallback((_e: any, _dir: any, ref: HTMLElement, _delta: any, position: { x: number; y: number }) => {
+    setDragSizeOverride(null)
+    onSnapPreviewChange(null)
     onResizeStop(
       position.x,
       position.y,
       parseInt(ref.style.width),
       parseInt(ref.style.height)
     )
-  }, [onResizeStop])
+  }, [onResizeStop, onSnapPreviewChange])
 
   // Maximized: render via portal into viewport (outside canvas transform)
   if (maximized && viewportRef?.current) {
@@ -86,12 +155,15 @@ export function FloatingWindow({
   return (
     <Rnd
       position={{ x, y }}
-      size={{ width, height }}
+      size={{ width: displayWidth, height: displayHeight }}
       style={{ ...windowStyle, zIndex }}
       dragHandleClassName="window-titlebar"
       minWidth={300}
       minHeight={200}
+      scale={zoom}
       onMouseDown={onFocus}
+      onDragStart={handleDragStart}
+      onDrag={handleDrag}
       onDragStop={handleDragStop}
       onResizeStop={handleResizeStop}
     >

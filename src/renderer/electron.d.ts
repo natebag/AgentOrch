@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentState, HubInfo } from '../shared/types'
+import type { AgentConfig, AgentState, HubInfo, PinboardTask, InfoEntry, WorkspacePreset } from '../shared/types'
 
 declare global {
   interface Window {
@@ -11,6 +11,14 @@ declare global {
       resizePty: (agentId: string, cols: number, rows: number) => Promise<void>
       getCwd: () => Promise<string>
       browseDirectory: (defaultPath: string) => Promise<string | null>
+      savePreset: (name: string, agents: AgentConfig[], windows: unknown, canvas: unknown) => Promise<{ status: string }>
+      loadPreset: (name: string) => Promise<WorkspacePreset>
+      listPresets: () => Promise<string[]>
+      deletePreset: (name: string) => Promise<{ status: string }>
+      getPinboardTasks: () => Promise<PinboardTask[]>
+      onPinboardUpdate: (callback: (tasks: PinboardTask[]) => void) => () => void
+      getInfoEntries: () => Promise<InfoEntry[]>
+      onInfoUpdate: (callback: (entries: InfoEntry[]) => void) => () => void
       onPtyOutput: (callback: (agentId: string, data: string) => void) => () => void
       onPtyExit: (callback: (agentId: string, exitCode: number | undefined) => void) => () => void
       onAgentStateUpdate: (callback: (agents: AgentState[]) => void) => () => void

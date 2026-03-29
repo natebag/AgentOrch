@@ -1,8 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
+import { createDatabase } from './db/database'
+import { MessageStore } from './db/message-store'
+import { PinboardStore } from './db/pinboard-store'
+import { InfoStore } from './db/info-store'
 import { createHubServer, type HubServer } from './hub/server'
 import { spawnAgentPty, writeToPty, resizePty, killPty, type ManagedPty } from './shell/pty-manager'
 import { writeAgentMcpConfig, cleanupConfig } from './mcp/config-writer'
+import { savePreset, loadPreset, listPresets, deletePreset } from './presets/preset-manager'
 import type { AgentConfig } from '../shared/types'
 import { IPC } from '../shared/types'
 
@@ -10,6 +15,11 @@ let hub: HubServer
 let mainWindow: BrowserWindow
 const agents = new Map<string, ManagedPty>()
 const hasReceivedInitialPrompt = new Set<string>()
+const initialPrompts = new Map<string, string>()
+const manualKills = new Set<string>() // Track intentional kills to skip auto-reconnect
+const CLI_LOAD_TIME = 10000
+const CODEX_SUBMIT_DELAY = 2000
+const RECONNECT_DELAY = 3000
 
 function getMcpServerPath(): string {
   if (app.isPackaged) {
@@ -91,10 +101,107 @@ function buildCliLaunchCommands(
 function buildInitialPrompt(config: AgentConfig): string {
   const lines = [
     `You are "${config.name}" (role: ${config.role}) in an AgentOrch workspace.`,
-    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes.`,
+    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes, get_agent_output, post_task, read_tasks, claim_task, complete_task, post_info, read_info.`,
     `Call read_ceo_notes() now for your instructions, then get_messages() to check for tasks from the orchestrator.`,
   ]
   return lines.join(' ')
+}
+
+function injectPrompt(managed: ManagedPty, prompt: string, delayMs: number): void {
+  setTimeout(() => {
+    if (managed.config.cli === 'codex') {
+      writeToPty(managed, prompt)
+      setTimeout(() => writeToPty(managed, '\r'), CODEX_SUBMIT_DELAY)
+      return
+    }
+
+    writeToPty(managed, prompt + '\r')
+  }, delayMs)
+}
+
+// Auto-reconnect: respawn an agent with its original config after an unexpected exit.
+function reconnectAgent(config: AgentConfig): void {
+  // Clean up stale state from previous instance
+  try { hub.registry.remove(config.name) } catch { /* already removed */ }
+  agents.delete(config.id)
+  hasReceivedInitialPrompt.delete(config.id)
+
+  const mcpServerPath = getMcpServerPath()
+  const mcpConfigPath = writeAgentMcpConfig({
+    agentId: config.id,
+    agentName: config.name,
+    hubPort: hub.port,
+    hubSecret: hub.secret,
+    mcpServerPath
+  })
+
+  const mcpEnv: Record<string, string> = {
+    AGENTORCH_HUB_PORT: String(hub.port),
+    AGENTORCH_HUB_SECRET: hub.secret,
+    AGENTORCH_AGENT_ID: config.id,
+    AGENTORCH_AGENT_NAME: config.name
+  }
+
+  hub.registry.register(config)
+  const initialPrompt = buildInitialPrompt(config)
+  initialPrompts.set(config.id, initialPrompt)
+  hasReceivedInitialPrompt.delete(config.id)
+
+  const managed = spawnAgentPty({
+    config,
+    mcpConfigPath,
+    extraEnv: mcpEnv,
+    onData: (data) => {
+      mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
+    },
+    onExit: (exitCode) => {
+      hub.registry.updateStatus(config.name, 'disconnected')
+      mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+
+      if (!manualKills.has(config.id) && config.cli !== 'terminal') {
+        console.log(`Agent "${config.name}" exited unexpectedly (code ${exitCode}), reconnecting in ${RECONNECT_DELAY}ms...`)
+        setTimeout(() => {
+          if (manualKills.has(config.id)) {
+            manualKills.delete(config.id)
+            return
+          }
+          reconnectAgent(config)
+        }, RECONNECT_DELAY)
+      } else {
+        manualKills.delete(config.id)
+      }
+    },
+    onStatusChange: (status) => {
+      hub.registry.updateStatus(config.name, status)
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+    },
+    onClearDetected: () => {
+      const prompt = initialPrompts.get(config.id)
+      if (prompt) injectPrompt(managed, prompt, CLI_LOAD_TIME)
+    }
+  })
+
+  agents.set(config.id, managed)
+  mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+
+  const cmds = buildCliLaunchCommands(config, mcpConfigPath, mcpServerPath, hub.port, hub.secret)
+  if (cmds) {
+    let delay = 1000
+    for (const cmd of cmds) {
+      setTimeout(() => writeToPty(managed, cmd + '\r'), delay)
+      delay += 3000
+    }
+    setTimeout(() => {
+      if (!hasReceivedInitialPrompt.has(config.id)) {
+        hasReceivedInitialPrompt.add(config.id)
+        injectPrompt(managed, initialPrompt, 0)
+      }
+    }, delay + CLI_LOAD_TIME)
+  }
+
+  console.log(`Agent "${config.name}" reconnected successfully`)
 }
 
 // When a message is queued for an agent, nudge them immediately via stdin.
@@ -151,6 +258,8 @@ function setupIPC(): void {
     }
 
     hub.registry.register(config)
+    const initialPrompt = buildInitialPrompt(config)
+    initialPrompts.set(config.id, initialPrompt)
 
     const managed = spawnAgentPty({
       config,
@@ -160,15 +269,32 @@ function setupIPC(): void {
         mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
       },
       onExit: (exitCode) => {
-
         hub.registry.updateStatus(config.name, 'disconnected')
         mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
         if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+
+        // Auto-reconnect: if this wasn't a manual kill, respawn after a delay
+        if (!manualKills.has(config.id) && config.cli !== 'terminal') {
+          console.log(`Agent "${config.name}" exited unexpectedly (code ${exitCode}), reconnecting in ${RECONNECT_DELAY}ms...`)
+          setTimeout(() => {
+            if (manualKills.has(config.id)) {
+              manualKills.delete(config.id)
+              return
+            }
+            reconnectAgent(config)
+          }, RECONNECT_DELAY)
+        } else {
+          manualKills.delete(config.id)
+        }
       },
       onStatusChange: (status) => {
         hub.registry.updateStatus(config.name, status)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      },
+      onClearDetected: () => {
+        const prompt = initialPrompts.get(config.id)
+        if (prompt) injectPrompt(managed, prompt, CLI_LOAD_TIME)
       }
     })
 
@@ -189,17 +315,10 @@ function setupIPC(): void {
 
       // Inject initial prompt AFTER the CLI has had time to fully load.
       // This goes into the agent CLI's input, not PowerShell.
-      const CLI_LOAD_TIME = 10000 // 10s for CLI to initialize after last command
       setTimeout(() => {
         if (!hasReceivedInitialPrompt.has(config.id)) {
           hasReceivedInitialPrompt.add(config.id)
-          const prompt = buildInitialPrompt(config)
-          if (config.cli === 'codex') {
-            writeToPty(managed, prompt)
-            setTimeout(() => writeToPty(managed, '\r'), 2000)
-          } else {
-            writeToPty(managed, prompt + '\r')
-          }
+          injectPrompt(managed, initialPrompt, 0)
         }
       }, delay + CLI_LOAD_TIME)
     }
@@ -217,10 +336,13 @@ function setupIPC(): void {
   ipcMain.handle(IPC.KILL_AGENT, (_event, agentId: string) => {
     const managed = agents.get(agentId)
     if (managed) {
+      manualKills.add(agentId) // Prevent auto-reconnect
       killPty(managed)
       hub.registry.remove(managed.config.name)
       hub.messages.clearAgent(managed.config.name)
       if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+      initialPrompts.delete(agentId)
+      hasReceivedInitialPrompt.delete(agentId)
       agents.delete(agentId)
       mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
     }
@@ -240,13 +362,74 @@ function setupIPC(): void {
     })
     return result.canceled ? null : result.filePaths[0]
   })
+
+  // Preset IPC handlers
+  ipcMain.handle(IPC.SAVE_PRESET, (_event, name: string, agentConfigs: AgentConfig[], windows: any[], canvas: any) => {
+    savePreset(name, agentConfigs, windows, canvas)
+    return { status: 'ok' }
+  })
+
+  ipcMain.handle(IPC.LOAD_PRESET, (_event, name: string) => {
+    return loadPreset(name)
+  })
+
+  ipcMain.handle(IPC.LIST_PRESETS, () => {
+    return listPresets()
+  })
+
+  ipcMain.handle(IPC.DELETE_PRESET, (_event, name: string) => {
+    deletePreset(name)
+    return { status: 'ok' }
+  })
+
+  // Pinboard IPC handlers
+  ipcMain.handle(IPC.PINBOARD_GET_TASKS, () => {
+    return hub.pinboard.readTasks()
+  })
+
+  // Info Channel IPC handlers
+  ipcMain.handle(IPC.INFO_GET_ENTRIES, () => {
+    return hub.infoChannel.readInfo()
+  })
 }
 
 async function main(): Promise<void> {
   await app.whenReady()
 
+  // Initialize SQLite persistence
+  const dbPath = path.join(app.getPath('userData'), 'agentorch.db')
+  const db = createDatabase(dbPath)
+  const messageStore = new MessageStore(db)
+  const pinboardStore = new PinboardStore(db)
+  const infoStore = new InfoStore(db)
+
   hub = await createHubServer()
   console.log(`Hub server running on port ${hub.port}`)
+
+  // Restore persisted state into in-memory stores
+  hub.pinboard.loadTasks(pinboardStore.loadTasks())
+  hub.infoChannel.loadEntries(infoStore.loadEntries())
+
+  // Hook persistence callbacks (write-behind to SQLite) + push to renderer
+  hub.messages.onMessageSaved = (msg) => messageStore.saveMessage(msg)
+  hub.pinboard.onTaskCreated = (task) => {
+    pinboardStore.saveTask(task)
+    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+  }
+  hub.pinboard.onTaskUpdated = (task) => {
+    pinboardStore.updateTask(task)
+    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+  }
+  hub.infoChannel.onEntryAdded = (entry) => {
+    infoStore.saveEntry(entry)
+    mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())
+  }
+
+  hub.setOutputAccessor((agentName, lines) => {
+    const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
+    if (!managed) return null
+    return managed.outputBuffer.getLines(lines)
+  })
   setupMessageNudge()
 
   setupIPC()
@@ -256,11 +439,17 @@ async function main(): Promise<void> {
 main()
 
 app.on('window-all-closed', () => {
+  // Mark all as manual kills to prevent auto-reconnect during shutdown
+  for (const [id] of agents) {
+    manualKills.add(id)
+  }
   for (const [, managed] of agents) {
     killPty(managed)
     if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
   }
   agents.clear()
+  initialPrompts.clear()
+  hasReceivedInitialPrompt.clear()
   hub?.close()
   app.quit()
 })

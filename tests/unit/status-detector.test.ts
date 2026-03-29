@@ -54,4 +54,28 @@ describe('StatusDetector', () => {
     detector.onExit()
     expect(detector.status).toBe('disconnected')
   })
+
+  it('fires clear callback when /clear is followed by a fresh prompt', () => {
+    const onClearDetected = vi.fn()
+    const detector = new StatusDetector({ promptRegex: />\s*$/, onClearDetected })
+
+    detector.onData('/clear\n')
+    detector.onData('claude> ')
+    vi.advanceTimersByTime(2500)
+
+    expect(onClearDetected).toHaveBeenCalledTimes(1)
+    expect(detector.status).toBe('active')
+  })
+
+  it("does not fire clear callback when /clear appears without a fresh prompt", () => {
+    const onClearDetected = vi.fn()
+    const detector = new StatusDetector({ promptRegex: />\s*$/, onClearDetected })
+
+    detector.onData('/clear\n')
+    detector.onData('normal output after clear')
+    vi.advanceTimersByTime(2500)
+
+    expect(onClearDetected).not.toHaveBeenCalled()
+    expect(detector.status).toBe('working')
+  })
 })

@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizePty: (agentId: string, cols: number, rows: number) => ipcRenderer.invoke('pty:resize', agentId, cols, rows),
   getCwd: () => ipcRenderer.invoke('app:cwd'),
   browseDirectory: (defaultPath: string) => ipcRenderer.invoke('dialog:browse-directory', defaultPath),
+  savePreset: (name: string, agents: unknown, windows: unknown, canvas: unknown) => 
+    ipcRenderer.invoke(IPC.SAVE_PRESET, name, agents, windows, canvas),
+  loadPreset: (name: string) => ipcRenderer.invoke(IPC.LOAD_PRESET, name),
+  listPresets: () => ipcRenderer.invoke(IPC.LIST_PRESETS),
+  deletePreset: (name: string) => ipcRenderer.invoke(IPC.DELETE_PRESET, name),
   onPtyOutput: (callback: (agentId: string, data: string) => void) => {
     const handler = (_event: unknown, agentId: string, data: string) => callback(agentId, data)
     ipcRenderer.on(IPC.PTY_OUTPUT, handler)
@@ -24,5 +29,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: unknown, agents: unknown[]) => callback(agents)
     ipcRenderer.on(IPC.AGENT_STATE_UPDATE, handler)
     return () => ipcRenderer.removeListener(IPC.AGENT_STATE_UPDATE, handler)
+  },
+  getPinboardTasks: () => ipcRenderer.invoke(IPC.PINBOARD_GET_TASKS),
+  onPinboardUpdate: (callback: (tasks: unknown[]) => void) => {
+    const handler = (_event: unknown, tasks: unknown[]) => callback(tasks)
+    ipcRenderer.on(IPC.PINBOARD_TASK_UPDATE, handler)
+    return () => ipcRenderer.removeListener(IPC.PINBOARD_TASK_UPDATE, handler)
+  },
+  getInfoEntries: () => ipcRenderer.invoke(IPC.INFO_GET_ENTRIES),
+  onInfoUpdate: (callback: (entries: unknown[]) => void) => {
+    const handler = (_event: unknown, entries: unknown[]) => callback(entries)
+    ipcRenderer.on(IPC.INFO_ENTRY_ADDED, handler)
+    return () => ipcRenderer.removeListener(IPC.INFO_ENTRY_ADDED, handler)
   }
 })

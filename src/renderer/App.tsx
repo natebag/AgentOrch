@@ -2,12 +2,17 @@ import React, { useState, useCallback, useEffect } from 'react'
 import { TopBar } from './components/TopBar'
 import { Workspace } from './components/Workspace'
 import { SpawnDialog } from './components/SpawnDialog'
+import { PresetDialog } from './components/PresetDialog'
 import { useWindowManager } from './hooks/useWindowManager'
 import { useAgents } from './hooks/useAgents'
 import type { AgentConfig } from '../shared/types'
 
+const PINBOARD_ID = '__pinboard__'
+const INFO_ID = '__info__'
+
 export function App(): React.ReactElement {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
+  const [showPresetDialog, setShowPresetDialog] = useState(false)
   const {
     windows, zoom, pan,
     addWindow, removeWindow, focusWindow, minimizeWindow,
@@ -15,20 +20,44 @@ export function App(): React.ReactElement {
   } = useWindowManager()
   const { agents, spawnAgent, killAgent, getStatusColor } = useAgents()
 
+  const pinboardOpen = windows.some(w => w.id === PINBOARD_ID)
+  const infoOpen = windows.some(w => w.id === INFO_ID)
+
   const handleSpawn = useCallback(async (config: Omit<AgentConfig, 'id'>) => {
     setShowSpawnDialog(false)
     const agentId = await spawnAgent(config)
     addWindow(agentId, `${config.name} (${config.cli})`, getStatusColor('idle'))
   }, [spawnAgent, addWindow, getStatusColor])
 
-  const handleClose = useCallback(async (agentId: string) => {
-    await killAgent(agentId)
-    removeWindow(agentId)
+  const handleClose = useCallback(async (windowId: string) => {
+    // Panel windows just get removed, no agent to kill
+    if (windowId === PINBOARD_ID || windowId === INFO_ID) {
+      removeWindow(windowId)
+      return
+    }
+    await killAgent(windowId)
+    removeWindow(windowId)
   }, [killAgent, removeWindow])
 
   const handleAgentPillClick = useCallback((agentId: string) => {
     focusWindow(agentId)
   }, [focusWindow])
+
+  const togglePinboard = useCallback(() => {
+    if (pinboardOpen) {
+      removeWindow(PINBOARD_ID)
+    } else {
+      addWindow(PINBOARD_ID, 'Pinboard')
+    }
+  }, [pinboardOpen, addWindow, removeWindow])
+
+  const toggleInfo = useCallback(() => {
+    if (infoOpen) {
+      removeWindow(INFO_ID)
+    } else {
+      addWindow(INFO_ID, 'Info Channel')
+    }
+  }, [infoOpen, addWindow, removeWindow])
 
   // Keyboard shortcuts: Ctrl+1..9 to focus windows, Ctrl+Tab to cycle
   useEffect(() => {
@@ -57,8 +86,7 @@ export function App(): React.ReactElement {
       }
       // Ctrl+Shift+0 = fit all
       if (e.ctrlKey && e.key === ')') {
-        // Shift+0 produces ')' on most keyboards
-        zoomToFit(window.innerWidth, window.innerHeight - 44) // minus TopBar height
+        zoomToFit(window.innerWidth, window.innerHeight - 44)
         e.preventDefault()
       }
     }
@@ -72,6 +100,11 @@ export function App(): React.ReactElement {
         agents={agents}
         onSpawnClick={() => setShowSpawnDialog(true)}
         onAgentClick={handleAgentPillClick}
+        pinboardOpen={pinboardOpen}
+        onTogglePinboard={togglePinboard}
+        infoOpen={infoOpen}
+        onToggleInfo={toggleInfo}
+        onPresetsClick={() => setShowPresetDialog(true)}
       />
       <Workspace
         windows={windows}
@@ -94,6 +127,19 @@ export function App(): React.ReactElement {
         <SpawnDialog
           onSpawn={handleSpawn}
           onCancel={() => setShowSpawnDialog(false)}
+        />
+      )}
+      {showPresetDialog && (
+        <PresetDialog
+          agents={agents}
+          windows={windows}
+          zoom={zoom}
+          pan={pan}
+          onLoadAgents={(configs) => {
+            setShowPresetDialog(false)
+            configs.forEach(config => handleSpawn(config))
+          }}
+          onClose={() => setShowPresetDialog(false)}
         />
       )}
     </div>

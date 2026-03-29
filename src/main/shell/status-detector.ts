@@ -8,6 +8,7 @@ interface StatusDetectorOptions {
   promptRegex?: RegExp
   silenceMs?: number
   onChange?: (status: AgentStatus) => void
+  onClearDetected?: () => void
 }
 
 export class StatusDetector {
@@ -17,11 +18,14 @@ export class StatusDetector {
   private silenceTimer: ReturnType<typeof setTimeout> | null = null
   private lastLineMatchedPrompt = false
   private onChange?: (status: AgentStatus) => void
+  private onClearDetected?: () => void
+  private awaitingPromptAfterClear = false
 
   constructor(opts: StatusDetectorOptions = {}) {
-    this.promptRegex = opts.promptRegex ?? /[>❯]\s*$/
+    this.promptRegex = opts.promptRegex ?? /[>\u276F]\s*$/
     this.silenceMs = opts.silenceMs ?? 2000
     this.onChange = opts.onChange
+    this.onClearDetected = opts.onClearDetected
   }
 
   get status(): AgentStatus {
@@ -32,13 +36,20 @@ export class StatusDetector {
     this.setStatus('working')
 
     const clean = stripAnsi(data)
-    const lines = clean.split('\n').filter(l => l.trim().length > 0)
+    const lines = clean.split('\n').filter(line => line.trim().length > 0)
     const lastLine = lines[lines.length - 1] ?? ''
+    if (lines.some(line => line.trim() === '/clear')) {
+      this.awaitingPromptAfterClear = true
+    }
     this.lastLineMatchedPrompt = this.promptRegex.test(lastLine)
 
     if (this.silenceTimer) clearTimeout(this.silenceTimer)
     this.silenceTimer = setTimeout(() => {
       if (this.lastLineMatchedPrompt && this._status === 'working') {
+        if (this.awaitingPromptAfterClear) {
+          this.awaitingPromptAfterClear = false
+          this.onClearDetected?.()
+        }
         this.setStatus('active')
       }
     }, this.silenceMs)
