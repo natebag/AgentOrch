@@ -3,7 +3,7 @@ import path from 'path'
 import { createHubServer, type HubServer } from './hub/server'
 import { spawnAgentPty, writeToPty, resizePty, killPty, type ManagedPty } from './shell/pty-manager'
 import { writeAgentMcpConfig, cleanupConfig } from './mcp/config-writer'
-import type { AgentConfig } from '../shared/types'
+import type { AgentConfig, AgentState } from '../shared/types'
 import { IPC } from '../shared/types'
 
 let hub: HubServer
@@ -37,6 +37,40 @@ function createWindow(): BrowserWindow {
   }
 
   return win
+}
+
+function buildInitialPrompt(config: AgentConfig, allAgents: AgentState[]): string {
+  const others = allAgents
+    .filter(a => a.name !== config.name)
+    .map(a => `  - ${a.name} (${a.cli}) — Role: ${a.role}`)
+    .join('\n')
+
+  return [
+    `You are "${config.name}" with role "${config.role}".`,
+    '',
+    'CEO Notes:',
+    config.ceoNotes || '(none)',
+    '',
+    'Other agents in this workspace:',
+    others || '  (none yet)',
+    '',
+    'IMPORTANT: After completing each task, call the get_messages() MCP tool to check for new work from other agents.',
+    ''
+  ].join('\n')
+}
+
+function buildCliLaunchCommand(config: AgentConfig, mcpConfigPath: string): string {
+  const cliBase = config.cli
+  if (cliBase === 'claude') {
+    return `claude --mcp-config "${mcpConfigPath}"\r`
+  }
+  if (cliBase === 'codex') {
+    return `codex --mcp-config "${mcpConfigPath}"\r`
+  }
+  if (cliBase === 'kimi') {
+    return `kimi --mcp-config "${mcpConfigPath}"\r`
+  }
+  return `${cliBase}\r`
 }
 
 function setupIPC(): void {
@@ -80,6 +114,18 @@ function setupIPC(): void {
 
     agents.set(config.id, managed)
     mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+
+    // Launch agent CLI and inject initial prompt
+    setTimeout(() => {
+      const launchCmd = buildCliLaunchCommand(config, mcpConfigPath)
+      writeToPty(managed, launchCmd)
+
+      // After CLI starts, inject the initial prompt
+      setTimeout(() => {
+        const prompt = buildInitialPrompt(config, hub.registry.list())
+        writeToPty(managed, prompt + '\r')
+      }, 3000)
+    }, 1000)
 
     return { id: config.id, mcpConfigPath }
   })
