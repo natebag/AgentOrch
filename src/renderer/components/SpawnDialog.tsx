@@ -22,6 +22,28 @@ const CLI_PRESETS = [
   { label: 'Custom', value: '' }
 ]
 
+const CLI_MODELS: Record<string, { label: string; value: string }[]> = {
+  claude: [
+    { label: 'Sonnet', value: 'sonnet' },
+    { label: 'Opus', value: 'opus' },
+    { label: 'Haiku', value: 'haiku' },
+    { label: 'Opus [1M context]', value: 'opus[1m]' },
+    { label: 'Sonnet [1M context]', value: 'sonnet[1m]' },
+    { label: 'Default (no --model flag)', value: '' },
+  ],
+  codex: [
+    { label: 'o4-mini (default)', value: '' },
+    { label: 'GPT-4.1', value: 'gpt-4.1' },
+    { label: 'o3', value: 'o3' },
+  ],
+  kimi: [
+    { label: 'Default', value: '' },
+    { label: 'Kimi K2.5', value: 'kimi-k2.5' },
+    { label: 'Kimi K2 Thinking Turbo', value: 'kimi-k2-thinking-turbo' },
+    { label: 'Moonshot v1 8K', value: 'moonshot-v1-8k' },
+  ]
+}
+
 const WINDOWS_SHELLS: AgentConfig['shell'][] = ['powershell', 'cmd']
 const POSIX_SHELLS: AgentConfig['shell'][] = ['bash', 'zsh', 'fish']
 
@@ -40,6 +62,7 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   const [autoMode, setAutoMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [promptRegex, setPromptRegex] = useState('')
+  const [model, setModel] = useState('sonnet')
 
   // Fetch cwd from main process (process.cwd is unavailable in renderer with contextIsolation)
   useEffect(() => {
@@ -49,6 +72,10 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   useEffect(() => {
     setShell(prev => shellOptions.includes(prev) ? prev : shellOptions[0])
   }, [isWindows])
+
+  useEffect(() => {
+    setModel('')
+  }, [cli])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,7 +88,8 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
       shell,
       admin,
       autoMode,
-      promptRegex: promptRegex.trim() || undefined
+      promptRegex: promptRegex.trim() || undefined,
+      model: model || undefined
     })
   }
 
@@ -103,6 +131,15 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
           <label style={labelStyle}>
             Custom Command
             <input value={customCli} onChange={e => setCustomCli(e.target.value)} required style={inputStyle} placeholder="my-agent --flag" />
+          </label>
+        )}
+
+        {CLI_MODELS[cli] && (
+          <label style={labelStyle}>
+            Model
+            <select value={model} onChange={e => setModel(e.target.value)} style={inputStyle}>
+              {CLI_MODELS[cli].map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
           </label>
         )}
 
