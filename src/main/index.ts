@@ -100,8 +100,13 @@ function setupMessageNudge(): void {
     const managed = Array.from(agents.values()).find(a => a.config.name === msg.to)
     if (!managed) return
 
-    const nudge = `[AgentOrch] New message from "${msg.from}". Call get_messages() now to read it.\r`
+    // Write the message text first, then send Enter separately after a short delay.
+    // Some CLIs (codex) buffer input and need the Enter as a distinct event.
+    const nudge = `[AgentOrch] New message from "${msg.from}". Call get_messages() now to read it.`
     writeToPty(managed, nudge)
+    setTimeout(() => {
+      writeToPty(managed, '\r')
+    }, 100)
   }
 }
 
@@ -178,7 +183,8 @@ function setupIPC(): void {
         if (!hasReceivedInitialPrompt.has(config.id)) {
           hasReceivedInitialPrompt.add(config.id)
           const prompt = buildInitialPrompt(config)
-          writeToPty(managed, prompt + '\r')
+          writeToPty(managed, prompt)
+          setTimeout(() => writeToPty(managed, '\r'), 100)
         }
       }, delay + CLI_LOAD_TIME)
     }
