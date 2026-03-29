@@ -166,16 +166,6 @@ function setupIPC(): void {
       onStatusChange: (status) => {
         hub.registry.updateStatus(config.name, status)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
-
-        // When CLI first becomes active (at its prompt), inject the initial context.
-        // This fires AFTER the agent CLI is loaded and ready — not into raw PowerShell.
-        if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
-          hasReceivedInitialPrompt.add(config.id)
-          if (config.cli !== 'terminal') {
-            const prompt = buildInitialPrompt(config)
-            writeToPty(managed, prompt + '\r')
-          }
-        }
       }
     })
 
@@ -193,6 +183,17 @@ function setupIPC(): void {
         }, delay)
         delay += 3000 // Give each command time to complete
       }
+
+      // Inject initial prompt AFTER the CLI has had time to fully load.
+      // This goes into the agent CLI's input, not PowerShell.
+      const CLI_LOAD_TIME = 10000 // 10s for CLI to initialize after last command
+      setTimeout(() => {
+        if (!hasReceivedInitialPrompt.has(config.id)) {
+          hasReceivedInitialPrompt.add(config.id)
+          const prompt = buildInitialPrompt(config)
+          writeToPty(managed, prompt + '\r')
+        }
+      }, delay + CLI_LOAD_TIME)
     }
 
     // For non-MCP agents: poll and inject messages into stdin
