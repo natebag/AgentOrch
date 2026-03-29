@@ -61,10 +61,10 @@ function buildCliLaunchCommands(config: AgentConfig, mcpConfigPath: string, mcpS
 
   if (cliBase === 'codex') {
     // Codex uses `codex mcp add <name> -- <command>` to register MCP servers.
-    // We register our server first, then launch codex. Env vars are on the PTY.
-    const mcpName = `agentorch-${config.id.slice(0, 8)}`
+    // Use a single consistent name so we don't pollute the global config.
+    // We remove + re-add to ensure the path is current.
     const cmds = [
-      `codex mcp add ${mcpName} -- node "${mcpServerPath}"`,
+      `codex mcp remove agentorch 2>$null; codex mcp add agentorch -- node "${mcpServerPath}"`,
     ]
     const codexCmd = config.autoMode ? 'codex --yolo' : 'codex'
     cmds.push(codexCmd)

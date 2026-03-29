@@ -6,6 +6,7 @@ await esbuild.build({
   platform: 'node',
   target: 'node20',
   outfile: 'out/mcp-server/index.js',
-  format: 'cjs',
-  external: ['@modelcontextprotocol/sdk']
+  format: 'cjs'
+  // No externals — bundle everything so the server is fully self-contained.
+  // This way it works regardless of what directory codex/kimi spawns it from.
 })
