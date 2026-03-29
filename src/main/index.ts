@@ -9,6 +9,10 @@ import { IPC } from '../shared/types'
 let hub: HubServer
 let mainWindow: BrowserWindow
 const agents = new Map<string, ManagedPty>()
+const messagePollers = new Map<string, ReturnType<typeof setInterval>>()
+
+// CLIs that natively support MCP (pull their own messages)
+const MCP_CAPABLE_CLIS = new Set(['claude', 'kimi'])
 
 function getMcpServerPath(): string {
   if (app.isPackaged) {
@@ -64,6 +68,32 @@ function buildCliLaunchCommand(config: AgentConfig, mcpConfigPath: string): stri
   return parts.join(' ') + '\r'
 }
 
+// For non-MCP agents: poll for messages and inject them into the terminal stdin
+function startMessagePoller(config: AgentConfig, managed: ManagedPty): void {
+  if (MCP_CAPABLE_CLIS.has(config.cli)) return // MCP agents pull their own messages
+
+  const poller = setInterval(() => {
+    const messages = hub.messages.getMessages(config.name)
+    if (messages.length === 0) return
+
+    for (const msg of messages) {
+      // Format message as readable text and inject into the agent's stdin
+      const formatted = `\r\n${msg.message}\r\n`
+      writeToPty(managed, formatted)
+    }
+  }, 2000) // Check every 2 seconds
+
+  messagePollers.set(config.id, poller)
+}
+
+function stopMessagePoller(agentId: string): void {
+  const poller = messagePollers.get(agentId)
+  if (poller) {
+    clearInterval(poller)
+    messagePollers.delete(agentId)
+  }
+}
+
 function setupIPC(): void {
   ipcMain.handle(IPC.GET_HUB_INFO, () => ({
     port: hub.port,
@@ -92,6 +122,7 @@ function setupIPC(): void {
         mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
       },
       onExit: (exitCode) => {
+        stopMessagePoller(config.id)
         hub.registry.updateStatus(config.name, 'disconnected')
         mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
@@ -114,6 +145,9 @@ function setupIPC(): void {
       }, 1000)
     }
 
+    // For non-MCP agents: poll and inject messages into stdin
+    startMessagePoller(config, managed)
+
     return { id: config.id, mcpConfigPath }
   })
 
@@ -125,6 +159,7 @@ function setupIPC(): void {
   ipcMain.handle(IPC.KILL_AGENT, (_event, agentId: string) => {
     const managed = agents.get(agentId)
     if (managed) {
+      stopMessagePoller(agentId)
       killPty(managed)
       hub.registry.remove(managed.config.name)
       hub.messages.clearAgent(managed.config.name)
@@ -155,7 +190,8 @@ async function main(): Promise<void> {
 main()
 
 app.on('window-all-closed', () => {
-  for (const [, managed] of agents) {
+  for (const [id, managed] of agents) {
+    stopMessagePoller(id)
     killPty(managed)
     if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
   }
