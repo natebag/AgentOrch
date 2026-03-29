@@ -15,6 +15,7 @@ export interface ManagedPty {
 interface SpawnOptions {
   config: AgentConfig
   mcpConfigPath: string | null
+  extraEnv?: Record<string, string>
   onData: (data: string) => void
   onExit: (exitCode: number | undefined) => void
   onStatusChange: (status: AgentStatus) => void
@@ -44,7 +45,7 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
     cols: 120,
     rows: 30,
     cwd: opts.config.cwd,
-    env: { ...process.env } as Record<string, string>
+    env: { ...process.env, ...opts.extraEnv } as Record<string, string>
   })
 
   ptyProcess.onData((data: string) => {

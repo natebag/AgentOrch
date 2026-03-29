@@ -12,7 +12,9 @@ const agents = new Map<string, ManagedPty>()
 const messagePollers = new Map<string, ReturnType<typeof setInterval>>()
 
 // CLIs that natively support MCP (pull their own messages)
-const MCP_CAPABLE_CLIS = new Set(['claude', 'kimi'])
+// CLIs that pull their own messages via MCP get_messages() tool.
+// Codex registers MCP via `codex mcp add` so it IS MCP-capable.
+const MCP_CAPABLE_CLIS = new Set(['claude', 'kimi', 'codex'])
 
 function getMcpServerPath(): string {
   if (app.isPackaged) {
@@ -43,29 +45,38 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-function buildCliLaunchCommand(config: AgentConfig, mcpConfigPath: string): string | null {
+// Returns one or more commands to type into the shell. Array = chain them sequentially.
+function buildCliLaunchCommands(config: AgentConfig, mcpConfigPath: string, mcpServerPath: string): string[] | null {
   const cliBase = config.cli
 
   // Plain terminal: don't launch any CLI, just leave the shell open
   if (cliBase === 'terminal') return null
 
-  const parts: string[] = [cliBase]
-
-  // MCP config flags vary by CLI
   if (cliBase === 'claude') {
-    parts.push(`--mcp-config "${mcpConfigPath}"`)
-    if (config.autoMode) parts.push('--dangerously-skip-permissions')
-  } else if (cliBase === 'codex') {
-    // Codex --config is for key=value overrides, not MCP config files.
-    // TODO: Write MCP config to codex's config directory for proper integration.
-    // For now, codex launches without MCP (no inter-agent messaging).
-    if (config.autoMode) parts.push('--yolo')
-  } else if (cliBase === 'kimi') {
-    parts.push(`--mcp-config "${mcpConfigPath}"`)
+    const parts = [`claude --mcp-config "${mcpConfigPath}"`]
+    if (config.autoMode) parts[0] += ' --dangerously-skip-permissions'
+    return parts
   }
-  // Custom CLIs: just run the command, no MCP flag
 
-  return parts.join(' ') + '\r'
+  if (cliBase === 'codex') {
+    // Codex uses `codex mcp add <name> -- <command>` to register MCP servers.
+    // We register our server first, then launch codex. Env vars are on the PTY.
+    const mcpName = `agentorch-${config.id.slice(0, 8)}`
+    const cmds = [
+      `codex mcp add ${mcpName} -- node "${mcpServerPath}"`,
+    ]
+    const codexCmd = config.autoMode ? 'codex --yolo' : 'codex'
+    cmds.push(codexCmd)
+    return cmds
+  }
+
+  if (cliBase === 'kimi') {
+    const parts = [`kimi --mcp-config-file "${mcpConfigPath}"`]
+    return parts
+  }
+
+  // Custom CLIs: just run the command, no MCP
+  return [cliBase]
 }
 
 // For non-MCP agents: poll for messages and inject them into the terminal stdin
@@ -105,19 +116,30 @@ function setupIPC(): void {
   })
 
   ipcMain.handle(IPC.SPAWN_AGENT, (_event, config: AgentConfig) => {
+    const mcpServerPath = getMcpServerPath()
     const mcpConfigPath = writeAgentMcpConfig({
       agentId: config.id,
       agentName: config.name,
       hubPort: hub.port,
       hubSecret: hub.secret,
-      mcpServerPath: getMcpServerPath()
+      mcpServerPath
     })
+
+    // Env vars for the MCP server — set on the PTY so child processes inherit them.
+    // Codex spawns MCP servers as subprocesses, so they'll pick these up.
+    const mcpEnv: Record<string, string> = {
+      AGENTORCH_HUB_PORT: String(hub.port),
+      AGENTORCH_HUB_SECRET: hub.secret,
+      AGENTORCH_AGENT_ID: config.id,
+      AGENTORCH_AGENT_NAME: config.name
+    }
 
     hub.registry.register(config)
 
     const managed = spawnAgentPty({
       config,
       mcpConfigPath,
+      extraEnv: mcpEnv,
       onData: (data) => {
         mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
       },
@@ -138,11 +160,16 @@ function setupIPC(): void {
     mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
 
     // Launch agent CLI after shell initializes (plain terminals skip this)
-    const launchCmd = buildCliLaunchCommand(config, mcpConfigPath)
-    if (launchCmd) {
-      setTimeout(() => {
-        writeToPty(managed, launchCmd)
-      }, 1000)
+    // Some CLIs need multiple commands (e.g., codex needs `mcp add` first)
+    const cmds = buildCliLaunchCommands(config, mcpConfigPath, mcpServerPath)
+    if (cmds) {
+      let delay = 1000
+      for (const cmd of cmds) {
+        setTimeout(() => {
+          writeToPty(managed, cmd + '\r')
+        }, delay)
+        delay += 3000 // Give each command time to complete
+      }
     }
 
     // For non-MCP agents: poll and inject messages into stdin
