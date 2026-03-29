@@ -1,0 +1,45 @@
+{
+  "name": "agentorch",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./out/main/index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "npm run build:mcp && electron-vite dev",
+    "build": "npm run build:mcp && electron-vite build",
+    "build:mcp": "node scripts/build-mcp-server.mjs",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^41.1.0",
+    "electron-vite": "^5.0.0",
+    "esbuild": "^0.27.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^6.0.2",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "express": "^5.2.1",
+    "node-pty": "^1.1.0",
+    "react-rnd": "^10.5.3",
+    "uuid": "^13.0.0"
+  }
+}

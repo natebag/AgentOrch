@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "outDir": "./out",
+    "rootDir": "./src",
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"]
+}

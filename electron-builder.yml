@@ -1,0 +1,10 @@
+appId: com.agentorch.app
+productName: AgentOrch
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!docs/*'
+  - '!tests/*'
+win:
+  target: portable
