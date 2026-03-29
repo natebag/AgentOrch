@@ -81,6 +81,7 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
   return (
     <div
       ref={containerRef}
+      onWheel={(e) => e.stopPropagation()}
       style={{ width: '100%', height: '100%', backgroundColor: '#0d0d0d' }}
     />
   )
