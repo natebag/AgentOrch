@@ -10,6 +10,7 @@ const makeConfig = (overrides: Partial<AgentConfig> = {}): AgentConfig => ({
   role: 'Tester',
   ceoNotes: 'Test agent',
   admin: false,
+  autoMode: false,
   ...overrides
 })
 

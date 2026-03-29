@@ -21,6 +21,7 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   const [role, setRole] = useState('')
   const [ceoNotes, setCeoNotes] = useState('')
   const [admin, setAdmin] = useState(false)
+  const [autoMode, setAutoMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [promptRegex, setPromptRegex] = useState('')
 
@@ -38,6 +39,7 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
       role: role.trim(),
       ceoNotes: ceoNotes.trim(),
       admin,
+      autoMode,
       promptRegex: promptRegex.trim() || undefined
     })
   }
@@ -101,6 +103,15 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
             style={{ ...inputStyle, height: '80px', resize: 'vertical' }}
             placeholder="Instructions for this agent..."
           />
+        </label>
+
+        <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+          <input type="checkbox" checked={autoMode} onChange={e => setAutoMode(e.target.checked)} />
+          Auto-approve mode
+          <span style={{ color: '#666', fontSize: '11px' }}>
+            {cli === 'claude' ? '(--dangerously-skip-permissions)' :
+             cli === 'codex' ? '(--yolo)' : '(auto-run)'}
+          </span>
         </label>
 
         <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>

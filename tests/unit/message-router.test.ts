@@ -10,7 +10,8 @@ const makeConfig = (name: string): AgentConfig => ({
   cwd: '/tmp',
   role: 'Test',
   ceoNotes: '',
-  admin: false
+  admin: false,
+  autoMode: false
 })
 
 describe('MessageRouter', () => {

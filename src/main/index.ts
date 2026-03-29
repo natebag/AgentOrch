@@ -3,7 +3,7 @@ import path from 'path'
 import { createHubServer, type HubServer } from './hub/server'
 import { spawnAgentPty, writeToPty, resizePty, killPty, type ManagedPty } from './shell/pty-manager'
 import { writeAgentMcpConfig, cleanupConfig } from './mcp/config-writer'
-import type { AgentConfig, AgentState } from '../shared/types'
+import type { AgentConfig } from '../shared/types'
 import { IPC } from '../shared/types'
 
 let hub: HubServer
@@ -39,38 +39,23 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-function buildInitialPrompt(config: AgentConfig, allAgents: AgentState[]): string {
-  const others = allAgents
-    .filter(a => a.name !== config.name)
-    .map(a => `  - ${a.name} (${a.cli}) — Role: ${a.role}`)
-    .join('\n')
-
-  return [
-    `You are "${config.name}" with role "${config.role}".`,
-    '',
-    'CEO Notes:',
-    config.ceoNotes || '(none)',
-    '',
-    'Other agents in this workspace:',
-    others || '  (none yet)',
-    '',
-    'IMPORTANT: After completing each task, call the get_messages() MCP tool to check for new work from other agents.',
-    ''
-  ].join('\n')
-}
-
 function buildCliLaunchCommand(config: AgentConfig, mcpConfigPath: string): string {
   const cliBase = config.cli
+  const parts: string[] = [cliBase]
+
+  // MCP config flags vary by CLI
   if (cliBase === 'claude') {
-    return `claude --mcp-config "${mcpConfigPath}"\r`
+    parts.push(`--mcp-config "${mcpConfigPath}"`)
+    if (config.autoMode) parts.push('--dangerously-skip-permissions')
+  } else if (cliBase === 'codex') {
+    parts.push(`--config "${mcpConfigPath}"`)
+    if (config.autoMode) parts.push('--yolo')
+  } else if (cliBase === 'kimi') {
+    parts.push(`--mcp-config "${mcpConfigPath}"`)
   }
-  if (cliBase === 'codex') {
-    return `codex --mcp-config "${mcpConfigPath}"\r`
-  }
-  if (cliBase === 'kimi') {
-    return `kimi --mcp-config "${mcpConfigPath}"\r`
-  }
-  return `${cliBase}\r`
+  // Custom CLIs: no MCP flag, no auto mode
+
+  return parts.join(' ') + '\r'
 }
 
 function setupIPC(): void {
@@ -115,16 +100,11 @@ function setupIPC(): void {
     agents.set(config.id, managed)
     mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
 
-    // Launch agent CLI and inject initial prompt
+    // Launch agent CLI after shell initializes
+    // Agents get their context via MCP tools (read_ceo_notes, get_agents) — not stdin injection
     setTimeout(() => {
       const launchCmd = buildCliLaunchCommand(config, mcpConfigPath)
       writeToPty(managed, launchCmd)
-
-      // After CLI starts, inject the initial prompt
-      setTimeout(() => {
-        const prompt = buildInitialPrompt(config, hub.registry.list())
-        writeToPty(managed, prompt + '\r')
-      }, 3000)
     }, 1000)
 
     return { id: config.id, mcpConfigPath }

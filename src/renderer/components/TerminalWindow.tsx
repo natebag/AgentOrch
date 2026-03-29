@@ -40,6 +40,25 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
       if (id === agentId) term.write(data)
     })
 
+    // Ctrl+C: copy if text selected, otherwise send SIGINT to PTY
+    term.attachCustomKeyEventHandler((ev) => {
+      if (ev.ctrlKey && ev.key === 'c' && ev.type === 'keydown') {
+        if (term.hasSelection()) {
+          navigator.clipboard.writeText(term.getSelection())
+          term.clearSelection()
+          return false // prevent sending to PTY
+        }
+      }
+      // Ctrl+V: paste from clipboard
+      if (ev.ctrlKey && ev.key === 'v' && ev.type === 'keydown') {
+        navigator.clipboard.readText().then(text => {
+          window.electronAPI.writeToPty(agentId, text)
+        })
+        return false
+      }
+      return true
+    })
+
     const disposable = term.onData((data) => {
       window.electronAPI.writeToPty(agentId, data)
     })

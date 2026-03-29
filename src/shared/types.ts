@@ -8,6 +8,7 @@ export interface AgentConfig {
   role: string
   ceoNotes: string
   admin: boolean
+  autoMode: boolean    // --dangerously-skip-permissions (Claude), --yolo (Codex), etc.
   promptRegex?: string
 }
 
