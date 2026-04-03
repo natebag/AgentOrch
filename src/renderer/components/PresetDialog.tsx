@@ -197,6 +197,127 @@ const BUILT_IN_TEMPLATES: PresetTemplate[] = [
       { name: 'worker', cli: 'openclaude', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for assignments. You run locally.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
     ]
   },
+  // --- Codex-only ---
+  {
+    name: 'Solo Codex',
+    description: '1 Codex agent with o4-mini. Lightweight, fast, OpenAI-powered.',
+    requiredClis: ['codex'],
+    agents: [
+      { name: 'agent', cli: 'codex', role: 'worker', ceoNotes: 'You are a solo agent. Check read_tasks() and get_messages() for work. You have full autonomy.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+    ]
+  },
+  {
+    name: 'Codex Orchestrator + Workers',
+    description: '1 o3 orchestrator + 2 o4-mini workers. All OpenAI native.',
+    requiredClis: ['codex'],
+    agents: [
+      { name: 'orchestrator', cli: 'codex', role: 'orchestrator', ceoNotes: 'You are the lead. Break tasks into subtasks and delegate to workers via post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'o3' },
+      { name: 'worker-1', cli: 'codex', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for assignments. Complete tasks and report back.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+      { name: 'worker-2', cli: 'codex', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for assignments. Complete tasks and report back.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+    ]
+  },
+  {
+    name: 'Codex Code + Review',
+    description: '1 o4-mini coder + 1 o3 reviewer. Codex-native code review loop.',
+    requiredClis: ['codex'],
+    agents: [
+      { name: 'coder', cli: 'codex', role: 'worker', ceoNotes: 'You write code. After each change, send_message() to the reviewer with a summary.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+      { name: 'reviewer', cli: 'codex', role: 'reviewer', ceoNotes: 'You review code. When the coder messages you, use get_agent_output() to inspect their work. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'o3' },
+    ]
+  },
+  // --- Kimi-only ---
+  {
+    name: 'Solo Kimi',
+    description: '1 Kimi K2.5 agent. Moonshot-powered, strong at research and Chinese language tasks.',
+    requiredClis: ['kimi'],
+    agents: [
+      { name: 'agent', cli: 'kimi', role: 'worker', ceoNotes: 'You are a solo agent. Check read_tasks() and get_messages() for work.', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+    ]
+  },
+  {
+    name: 'Kimi Research Pair',
+    description: '1 orchestrator + 1 researcher. Kimi-native deep research team.',
+    requiredClis: ['kimi'],
+    agents: [
+      { name: 'lead', cli: 'kimi', role: 'orchestrator', ceoNotes: 'You plan research. Break questions into sub-questions. Delegate via post_task(). Synthesize findings.', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+      { name: 'researcher', cli: 'kimi', role: 'researcher', ceoNotes: 'You research deeply. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+    ]
+  },
+  {
+    name: 'Kimi Code + Review',
+    description: '1 coder + 1 reviewer. Kimi-native code review workflow.',
+    requiredClis: ['kimi'],
+    agents: [
+      { name: 'coder', cli: 'kimi', role: 'worker', ceoNotes: 'You write code. After each change, send_message() to the reviewer.', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+      { name: 'reviewer', cli: 'kimi', role: 'reviewer', ceoNotes: 'You review code. Use get_agent_output() to inspect work. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+    ]
+  },
+  // --- Gemini-only ---
+  {
+    name: 'Solo Gemini',
+    description: '1 Gemini 2.5 Pro agent. Google-powered, strong at broad knowledge tasks.',
+    requiredClis: ['gemini'],
+    agents: [
+      { name: 'agent', cli: 'gemini', role: 'worker', ceoNotes: 'You are a solo agent. Check read_tasks() and get_messages() for work.', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
+  {
+    name: 'Gemini Research Squad',
+    description: '1 Pro orchestrator + 2 Flash researchers. Google-native research team.',
+    requiredClis: ['gemini'],
+    agents: [
+      { name: 'lead', cli: 'gemini', role: 'orchestrator', ceoNotes: 'You coordinate research. Break questions into sub-questions. Delegate via post_task().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+      { name: 'researcher-1', cli: 'gemini', role: 'researcher', ceoNotes: 'Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-flash' },
+      { name: 'researcher-2', cli: 'gemini', role: 'researcher', ceoNotes: 'Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-flash' },
+    ]
+  },
+  {
+    name: 'Gemini Code + Review',
+    description: '1 Flash coder + 1 Pro reviewer. Gemini-native code review loop.',
+    requiredClis: ['gemini'],
+    agents: [
+      { name: 'coder', cli: 'gemini', role: 'worker', ceoNotes: 'You write code. After each change, send_message() to the reviewer.', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-flash' },
+      { name: 'reviewer', cli: 'gemini', role: 'reviewer', ceoNotes: 'You review code. Use get_agent_output() to inspect work. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
+  // --- Cross-CLI (non-Claude) ---
+  {
+    name: 'Codex + Kimi',
+    description: 'Codex codes, Kimi researches. OpenAI implementation + Moonshot knowledge.',
+    requiredClis: ['codex', 'kimi'],
+    agents: [
+      { name: 'coder', cli: 'codex', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() and get_messages() for assignments. Report back when done.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+      { name: 'researcher', cli: 'kimi', role: 'researcher', ceoNotes: 'You research and provide context. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+    ]
+  },
+  {
+    name: 'Codex + Gemini',
+    description: 'Codex codes, Gemini researches. OpenAI implementation + Google knowledge.',
+    requiredClis: ['codex', 'gemini'],
+    agents: [
+      { name: 'coder', cli: 'codex', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+      { name: 'researcher', cli: 'gemini', role: 'researcher', ceoNotes: 'You research and provide context. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
+  {
+    name: 'Kimi + Gemini',
+    description: 'Kimi + Gemini dual research. Two knowledge bases, one team.',
+    requiredClis: ['kimi', 'gemini'],
+    agents: [
+      { name: 'kimi-researcher', cli: 'kimi', role: 'researcher', ceoNotes: 'You research from the Moonshot perspective. Check read_tasks() for assignments. Post findings to post_info() with tags.', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+      { name: 'gemini-researcher', cli: 'gemini', role: 'researcher', ceoNotes: 'You research from the Google perspective. Check read_tasks() for assignments. Post findings to post_info() with tags.', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
+  {
+    name: 'Triple Threat',
+    description: 'Codex + Kimi + Gemini. Three ecosystems, one project. No Claude needed.',
+    requiredClis: ['codex', 'kimi', 'gemini'],
+    agents: [
+      { name: 'coder', cli: 'codex', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'o3' },
+      { name: 'researcher', cli: 'kimi', role: 'researcher', ceoNotes: 'You research. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+      { name: 'analyst', cli: 'gemini', role: 'researcher', ceoNotes: 'You analyze and verify. Check read_tasks() for assignments. Cross-reference findings in read_info().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
 ]
 
 const ALL_CLIS = ['claude', 'codex', 'kimi', 'gemini', 'openclaude']
