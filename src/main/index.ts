@@ -76,7 +76,7 @@ function buildCliLaunchCommands(
 function buildInitialPrompt(config: AgentConfig): string {
   const lines = [
     `You are "${config.name}" (role: ${config.role}) in an AgentOrch workspace.`,
-    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes, get_agent_output, post_task, read_tasks, claim_task, complete_task, abandon_task, get_task, post_info, read_info, delete_info, update_info, update_status, get_message_history, ack_messages.`,
+    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes, get_agent_output, post_task, read_tasks, claim_task, complete_task, abandon_task, get_task, post_info, read_info, delete_info, update_info, update_status, get_message_history, ack_messages, read_file, write_file, list_directory.`,
     `Call read_ceo_notes() now for your instructions, then get_messages() to check for tasks from the orchestrator.`,
   ]
   return lines.join(' ')
@@ -308,6 +308,7 @@ async function openProject(projectPath: string): Promise<void> {
   const infoStore = new InfoStore(db)
 
   hub = await createHubServer()
+  hub.setProjectPath(projectPath)
   hub.setMessageStore(messageStore)
   console.log(`Hub server running on port ${hub.port} for project: ${projectManager.currentProject!.name}`)
 

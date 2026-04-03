@@ -435,6 +435,63 @@ server.tool(
   }
 )
 
+server.tool(
+  'read_file',
+  'Read the contents of a file in the project directory. Path is relative to the project root.',
+  {
+    path: z.string().describe('Relative path to the file (e.g., "src/index.ts", "package.json")')
+  },
+  async ({ path }) => {
+    try {
+      const result = await hubFetch(`/files/read?path=${encodeURIComponent(path)}`)
+      return toolResult(result.content)
+    } catch (err: any) {
+      return toolError(`Failed to read file: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'write_file',
+  'Write content to a file in the project directory. Creates parent directories if needed. Path is relative to project root.',
+  {
+    path: z.string().describe('Relative path for the file (e.g., "src/new-file.ts")'),
+    content: z.string().describe('The full file content to write')
+  },
+  async ({ path, content }) => {
+    try {
+      const result = await hubFetch('/files/write', {
+        method: 'POST',
+        body: JSON.stringify({ path, content })
+      })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to write file: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'list_directory',
+  'List files and subdirectories in a project directory. Path is relative to project root. Defaults to root if no path given.',
+  {
+    path: z.string().optional().default('.').describe('Relative directory path (default: project root)')
+  },
+  async ({ path }) => {
+    try {
+      const result = await hubFetch(`/files/list?path=${encodeURIComponent(path)}`)
+      if (result.items.length === 0) return toolResult('Directory is empty.')
+      // Format as a readable listing
+      const listing = result.items.map((item: any) =>
+        `${item.type === 'directory' ? '[DIR]' : '     '} ${item.name}`
+      ).join('\n')
+      return toolResult(`${result.path}/\n${listing}`)
+    } catch (err: any) {
+      return toolError(`Failed to list directory: ${err.message}`)
+    }
+  }
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

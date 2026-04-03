@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from 'express'
+import * as fs from 'fs'
+import * as path from 'path'
 import type { AgentRegistry } from './agent-registry'
 import type { MessageRouter } from './message-router'
 import type { Pinboard } from './pinboard'
@@ -16,7 +18,8 @@ export function createRoutes(
   pinboard: Pinboard,
   infoChannel: InfoChannel,
   messageStoreRef: { store: MessageStore | null } = { store: null },
-  buddyRoom?: BuddyRoom
+  buddyRoom?: BuddyRoom,
+  projectPathRef: { path: string | null } = { path: null }
 ): Router {
   const router = Router()
 
@@ -215,6 +218,108 @@ export function createRoutes(
       res.json(entry)
     } catch (err: any) {
       res.status(400).json({ error: err.message })
+    }
+  })
+
+  // --- File operation routes ---
+
+  function resolveProjectPath(requestedPath: string): string | null {
+    if (!projectPathRef.path) return null
+    const resolved = path.resolve(projectPathRef.path, requestedPath)
+    // Security: ensure resolved path is within project root
+    if (!resolved.startsWith(projectPathRef.path)) return null
+    return resolved
+  }
+
+  router.get('/files/read', (req: Request, res: Response) => {
+    const filePath = req.query.path as string
+    if (!filePath) {
+      res.status(400).json({ error: 'path query parameter is required' })
+      return
+    }
+    const resolved = resolveProjectPath(filePath)
+    if (!resolved) {
+      res.status(403).json({ error: 'Path outside project directory' })
+      return
+    }
+    try {
+      if (!fs.existsSync(resolved)) {
+        res.status(404).json({ error: `File not found: ${filePath}` })
+        return
+      }
+      const stat = fs.statSync(resolved)
+      if (stat.isDirectory()) {
+        res.status(400).json({ error: 'Path is a directory, use /files/list instead' })
+        return
+      }
+      // Limit read size to 1MB to prevent huge files from crashing
+      if (stat.size > 1024 * 1024) {
+        res.status(413).json({ error: `File too large (${stat.size} bytes). Max 1MB.` })
+        return
+      }
+      const content = fs.readFileSync(resolved, 'utf-8')
+      res.json({ path: filePath, content, size: stat.size })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
+  router.post('/files/write', (req: Request, res: Response) => {
+    const { path: filePath, content } = req.body
+    if (!filePath || content === undefined) {
+      res.status(400).json({ error: 'path and content are required' })
+      return
+    }
+    const resolved = resolveProjectPath(filePath)
+    if (!resolved) {
+      res.status(403).json({ error: 'Path outside project directory' })
+      return
+    }
+    try {
+      // Ensure parent directory exists
+      const dir = path.dirname(resolved)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      fs.writeFileSync(resolved, content, 'utf-8')
+      const stat = fs.statSync(resolved)
+      res.json({ path: filePath, size: stat.size, status: 'ok' })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
+    }
+  })
+
+  router.get('/files/list', (req: Request, res: Response) => {
+    const dirPath = (req.query.path as string) || '.'
+    const resolved = resolveProjectPath(dirPath)
+    if (!resolved) {
+      res.status(403).json({ error: 'Path outside project directory' })
+      return
+    }
+    try {
+      if (!fs.existsSync(resolved)) {
+        res.status(404).json({ error: `Directory not found: ${dirPath}` })
+        return
+      }
+      const stat = fs.statSync(resolved)
+      if (!stat.isDirectory()) {
+        res.status(400).json({ error: 'Path is a file, use /files/read instead' })
+        return
+      }
+      const entries = fs.readdirSync(resolved, { withFileTypes: true })
+      const items = entries.map(entry => ({
+        name: entry.name,
+        type: entry.isDirectory() ? 'directory' : 'file',
+        path: path.join(dirPath, entry.name).replace(/\\/g, '/')
+      }))
+      // Sort: directories first, then files, both alphabetical
+      items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+      res.json({ path: dirPath, items })
+    } catch (err: any) {
+      res.status(500).json({ error: err.message })
     }
   })
 
