@@ -3,6 +3,8 @@ import { AgentPill } from './AgentPill'
 import type { AgentState } from '../../shared/types'
 
 interface TopBarProps {
+  projectName: string | null
+  onSwitchProject: () => void
   agents: AgentState[]
   onSpawnClick: () => void
   onAgentClick: (agentId: string) => void
@@ -25,7 +27,7 @@ const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap'
 })
 
-export function TopBar({ agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, onPresetsClick }: TopBarProps): React.ReactElement {
+export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, onPresetsClick }: TopBarProps): React.ReactElement {
   return (
     <div style={{
       height: '44px',
@@ -37,6 +39,31 @@ export function TopBar({ agents, onSpawnClick, onAgentClick, pinboardOpen, onTog
       gap: '8px',
       flexShrink: 0
     }}>
+      {projectName && (
+        <button
+          onClick={onSwitchProject}
+          title="Switch Project"
+          style={{
+            height: '28px',
+            padding: '0 10px',
+            borderRadius: '5px',
+            border: '1px solid #333',
+            backgroundColor: 'transparent',
+            color: '#aaa',
+            fontSize: '12px',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            maxWidth: '200px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
+          {projectName}
+        </button>
+      )}
+      {projectName && (
+        <div style={{ width: '1px', height: '24px', backgroundColor: '#333', margin: '0 4px' }} />
+      )}
       <button
         onClick={onSpawnClick}
         style={{
