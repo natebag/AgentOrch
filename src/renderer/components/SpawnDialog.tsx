@@ -18,6 +18,10 @@ const CLI_PRESETS = [
   { label: 'Claude Code', value: 'claude' },
   { label: 'Codex CLI', value: 'codex' },
   { label: 'Kimi CLI', value: 'kimi' },
+  { label: 'Gemini CLI', value: 'gemini' },
+  { label: 'OpenClaude (Any Model)', value: 'openclaude' },
+  { label: 'GitHub Copilot CLI', value: 'copilot' },
+  { label: 'Grok CLI (Experimental)', value: 'grok' },
   { label: 'Plain Terminal', value: 'terminal' },
   { label: 'Custom', value: '' }
 ]
@@ -41,8 +45,45 @@ const CLI_MODELS: Record<string, { label: string; value: string }[]> = {
     { label: 'Kimi K2.5', value: 'kimi-k2.5' },
     { label: 'Kimi K2 Thinking Turbo', value: 'kimi-k2-thinking-turbo' },
     { label: 'Moonshot v1 8K', value: 'moonshot-v1-8k' },
-  ]
+  ],
+  gemini: [
+    { label: 'Default', value: '' },
+    { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+    { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+    { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+    { label: 'Gemini 2.0 Flash Thinking', value: 'gemini-2.0-flash-thinking' },
+  ],
+  copilot: [
+    { label: 'Default (Copilot model)', value: '' },
+    { label: 'GPT-4o', value: 'gpt-4o' },
+    { label: 'o3-mini', value: 'o3-mini' },
+  ],
+  grok: [
+    { label: 'Default', value: '' },
+    { label: 'Grok 3', value: 'grok-3' },
+    { label: 'Grok 3 Mini', value: 'grok-3-mini' },
+    { label: 'Grok 2', value: 'grok-2' },
+  ],
+  openclaude: [
+    { label: 'GPT-4o', value: 'gpt-4o' },
+    { label: 'GPT-4.1', value: 'gpt-4.1' },
+    { label: 'DeepSeek Chat', value: 'deepseek-chat' },
+    { label: 'DeepSeek Reasoner', value: 'deepseek-reasoner' },
+    { label: 'Llama 3 (Ollama)', value: 'llama3' },
+    { label: 'Mistral Large', value: 'mistral-large-latest' },
+    { label: 'Custom', value: '' },
+  ],
 }
+
+const OPENCLAUDE_PROVIDERS: { label: string; url: string }[] = [
+  { label: 'OpenAI', url: 'https://api.openai.com/v1' },
+  { label: 'DeepSeek', url: 'https://api.deepseek.com/v1' },
+  { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+  { label: 'Together AI', url: 'https://api.together.xyz/v1' },
+  { label: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { label: 'Ollama (Local)', url: 'http://localhost:11434/v1' },
+  { label: 'Custom URL', url: '' },
+]
 
 const WINDOWS_SHELLS: AgentConfig['shell'][] = ['powershell', 'cmd']
 const POSIX_SHELLS: AgentConfig['shell'][] = ['bash', 'zsh', 'fish']
@@ -63,6 +104,9 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [promptRegex, setPromptRegex] = useState('')
   const [model, setModel] = useState('sonnet')
+  const [customModel, setCustomModel] = useState('')
+  const [providerUrl, setProviderUrl] = useState('https://api.openai.com/v1')
+  const [customProviderUrl, setCustomProviderUrl] = useState('')
 
   // Fetch cwd from main process (process.cwd is unavailable in renderer with contextIsolation)
   useEffect(() => {
@@ -75,6 +119,9 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
 
   useEffect(() => {
     setModel('')
+    setCustomModel('')
+    setProviderUrl('https://api.openai.com/v1')
+    setCustomProviderUrl('')
   }, [cli])
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -89,7 +136,9 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
       admin,
       autoMode,
       promptRegex: promptRegex.trim() || undefined,
-      model: model || undefined
+      model: (model || customModel.trim()) || undefined,
+      providerUrl: cli === 'openclaude' ? (providerUrl || customProviderUrl.trim()) || undefined : undefined,
+      experimental: cli === 'grok' ? true : undefined
     })
   }
 
@@ -143,6 +192,52 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
           </label>
         )}
 
+        {cli === 'grok' && (
+          <div style={{ color: '#d0a85c', fontSize: '11px' }}>
+            Experimental integration: community-maintained Grok CLI support may change underneath us.
+          </div>
+        )}
+
+        {cli === 'openclaude' && (
+          <label style={labelStyle}>
+            Provider
+            <select
+              value={providerUrl}
+              onChange={e => setProviderUrl(e.target.value)}
+              style={inputStyle}
+            >
+              {OPENCLAUDE_PROVIDERS.map(p => (
+                <option key={p.url} value={p.url}>{p.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {cli === 'openclaude' && providerUrl === '' && (
+          <label style={labelStyle}>
+            Custom Provider URL
+            <input
+              value={customProviderUrl}
+              onChange={e => setCustomProviderUrl(e.target.value)}
+              style={inputStyle}
+              placeholder="https://api.example.com/v1"
+              required
+            />
+          </label>
+        )}
+
+        {cli === 'openclaude' && model === '' && (
+          <label style={labelStyle}>
+            Custom Model Name
+            <input
+              value={customModel}
+              onChange={e => setCustomModel(e.target.value)}
+              style={inputStyle}
+              placeholder="e.g. gpt-4o-mini, codellama"
+            />
+          </label>
+        )}
+
         <label style={labelStyle}>
           Working Directory
           <div style={{ display: 'flex', gap: '4px' }}>
@@ -192,8 +287,11 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
           Auto-approve mode
           <span style={{ color: '#666', fontSize: '11px' }}>
             {cli === 'claude' ? '(--dangerously-skip-permissions)' :
+             cli === 'openclaude' ? '(--dangerously-skip-permissions)' :
              cli === 'codex' ? '(--yolo)' :
-             cli === 'kimi' ? '(--yolo)' : '(auto-run)'}
+             cli === 'kimi' ? '(--yolo)' :
+             cli === 'gemini' ? '(--yolo)' :
+             cli === 'copilot' ? '(--allow-all)' : '(auto-run)'}
           </span>
         </label>
 

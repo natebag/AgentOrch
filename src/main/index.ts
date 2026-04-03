@@ -146,6 +146,10 @@ function reconnectAgent(config: AgentConfig): void {
   if (config.cli === 'grok' && config.model) {
     mcpEnv.GROK_MODEL = config.model
   }
+  if (config.cli === 'openclaude') {
+    if (config.model) mcpEnv.OPENAI_MODEL = config.model
+    if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
+  }
 
   hub.registry.register(config)
   const initialPrompt = buildReconnectPrompt(config)
@@ -397,6 +401,10 @@ function setupIPC(): void {
     }
     if (config.cli === 'grok' && config.model) {
       mcpEnv.GROK_MODEL = config.model
+    }
+    if (config.cli === 'openclaude') {
+      if (config.model) mcpEnv.OPENAI_MODEL = config.model
+      if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
     }
 
     hub.registry.register(config)
