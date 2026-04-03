@@ -5,7 +5,7 @@ import type { AgentRegistry } from './agent-registry'
 const MAX_MESSAGE_SIZE = 10 * 1024
 const MAX_QUEUE_DEPTH = 100
 const RATE_LIMIT_WINDOW_MS = 60_000
-const MAX_MESSAGES_PER_WINDOW = 10
+const MAX_MESSAGES_PER_WINDOW = 30
 
 export class MessageRouter {
   private queues = new Map<string, Message[]>()
@@ -24,7 +24,7 @@ export class MessageRouter {
       const now = Date.now()
       const recentTimestamps = this.pruneRecentTimestamps(from, now)
       if (recentTimestamps.length >= MAX_MESSAGES_PER_WINDOW) {
-        return { status: 'error', detail: 'Rate limit exceeded. Max 10 messages per minute.' }
+        return { status: 'error', detail: 'Rate limit exceeded. Max 30 messages per minute.' }
       }
       recentTimestamps.push(now)
       this.sendTimestamps.set(from, recentTimestamps)
@@ -65,13 +65,25 @@ export class MessageRouter {
     return { status: 'delivered' }
   }
 
-  getMessages(agentName: string): Message[] {
+  getMessages(agentName: string, peek = false): Message[] {
     const queue = this.queues.get(agentName)
     if (!queue || queue.length === 0) return []
 
     const messages = [...queue]
-    queue.length = 0
+    if (!peek) queue.length = 0
     return messages
+  }
+
+  ackMessages(agentName: string, messageIds: string[]): number {
+    const queue = this.queues.get(agentName)
+    if (!queue) return 0
+
+    const idSet = new Set(messageIds)
+    const before = queue.length
+    const remaining = queue.filter(m => !idSet.has(m.id))
+    queue.length = 0
+    queue.push(...remaining)
+    return before - queue.length
   }
 
   clearAgent(agentName: string): void {
@@ -97,7 +109,7 @@ export class MessageRouter {
     const now = Date.now()
     const recentTimestamps = this.pruneRecentTimestamps(from, now)
     if (recentTimestamps.length >= MAX_MESSAGES_PER_WINDOW) {
-      return { delivered: 0, failed: [], error: 'Rate limit exceeded. Max 10 messages per minute.' }
+      return { delivered: 0, failed: [], error: 'Rate limit exceeded. Max 30 messages per minute.' }
     }
     recentTimestamps.push(now)
     this.sendTimestamps.set(from, recentTimestamps)
