@@ -21,6 +21,7 @@ type Tab = 'save' | 'load' | 'templates'
 interface PresetTemplate {
   name: string
   description: string
+  requiredClis: string[]
   agents: Omit<AgentConfig, 'id' | 'cwd'>[]
 }
 
@@ -28,6 +29,7 @@ const BUILT_IN_TEMPLATES: PresetTemplate[] = [
   {
     name: 'Orchestrator + Workers',
     description: '1 orchestrator (Opus) directing 2 workers (Sonnet). Classic delegation pattern.',
+    requiredClis: ['claude'],
     agents: [
       { name: 'orchestrator', cli: 'claude', role: 'orchestrator', ceoNotes: 'You are the lead. Break tasks into subtasks and delegate to workers. Synthesize their results. Use post_task() and send_message() to coordinate.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
       { name: 'worker-1', cli: 'claude', role: 'worker', ceoNotes: 'You are a worker. Check read_tasks() and get_messages() for assignments. Complete tasks and report back to the orchestrator.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
@@ -37,39 +39,174 @@ const BUILT_IN_TEMPLATES: PresetTemplate[] = [
   {
     name: 'Research Squad',
     description: '1 orchestrator + 3 researchers. Deep research with parallel information gathering.',
+    requiredClis: ['claude'],
     agents: [
       { name: 'lead', cli: 'claude', role: 'orchestrator', ceoNotes: 'You coordinate a research team. Break research questions into sub-questions. Assign to researchers via post_task(). Synthesize findings posted to the info channel.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
-      { name: 'researcher-1', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
-      { name: 'researcher-2', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
-      { name: 'researcher-3', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
+      { name: 'researcher-1', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'researcher-2', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'researcher-3', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
     ]
   },
   {
     name: 'Code + Review',
     description: '1 coder + 1 reviewer. Continuous code review workflow.',
+    requiredClis: ['claude'],
     agents: [
-      { name: 'coder', cli: 'claude', role: 'worker', ceoNotes: 'You write code. After completing each change, send_message() to the reviewer with a summary of what changed and why. Wait for feedback before proceeding.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
-      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code. When the coder messages you, use get_agent_output() to see their terminal, review the changes, and send_message() back with feedback. Be constructive but thorough.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'coder', cli: 'claude', role: 'worker', ceoNotes: 'You write code. After completing each change, send_message() to the reviewer with a summary of what changed and why.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code. When the coder messages you, use get_agent_output() to see their terminal, review the changes, and send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
     ]
   },
   {
-    name: 'Multi-Model Team (OpenClaude)',
-    description: 'Mixed providers: GPT-4o orchestrator, DeepSeek coder, Claude reviewer. Requires OpenClaude installed.',
+    name: 'Speed Swarm',
+    description: '3 Haiku agents for maximum throughput on simple parallel tasks.',
+    requiredClis: ['claude'],
     agents: [
-      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate the team. Delegate coding tasks to the coder and review requests to the reviewer. Use post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4o', providerUrl: 'https://api.openai.com/v1' },
-      { name: 'coder', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement code changes. Check read_tasks() for assignments. Post completed work summaries to the orchestrator.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
-      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code changes. When asked, use get_agent_output() to inspect work and send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'swarm-1', cli: 'claude', role: 'worker', ceoNotes: 'You are a fast worker. Check read_tasks() for assignments. Complete them quickly and move to the next.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
+      { name: 'swarm-2', cli: 'claude', role: 'worker', ceoNotes: 'You are a fast worker. Check read_tasks() for assignments. Complete them quickly and move to the next.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
+      { name: 'swarm-3', cli: 'claude', role: 'worker', ceoNotes: 'You are a fast worker. Check read_tasks() for assignments. Complete them quickly and move to the next.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
     ]
   },
   {
-    name: 'Local-Only (Ollama)',
-    description: 'All agents run locally via Ollama. No API keys needed. Requires OpenClaude + Ollama.',
+    name: 'Solo Opus',
+    description: '1 Opus agent. Full power, no coordination overhead.',
+    requiredClis: ['claude'],
     agents: [
-      { name: 'orchestrator', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate local agents. Break tasks down and delegate. Use post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
-      { name: 'worker-1', cli: 'openclaude', role: 'worker', ceoNotes: 'You are a worker. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
+      { name: 'agent', cli: 'claude', role: 'worker', ceoNotes: 'You are a solo agent. Check read_tasks() and get_messages() for work. You have full autonomy to plan and execute.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+    ]
+  },
+  {
+    name: 'TDD Pipeline',
+    description: '1 coder + 1 tester + 1 reviewer. Red-green-refactor workflow.',
+    requiredClis: ['claude'],
+    agents: [
+      { name: 'coder', cli: 'claude', role: 'worker', ceoNotes: 'You implement features. Wait for test specs from the tester before writing code. After implementing, send_message() to the reviewer.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'tester', cli: 'claude', role: 'worker', ceoNotes: 'You write tests FIRST. When a task is posted, write failing tests that define the expected behavior, then send_message() to the coder with the test file path.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review completed work. When the coder messages you, review both tests and implementation. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+    ]
+  },
+  {
+    name: 'Documentation Team',
+    description: '1 researcher + 1 writer + 1 reviewer. Produce polished documentation.',
+    requiredClis: ['claude'],
+    agents: [
+      { name: 'researcher', cli: 'claude', role: 'researcher', ceoNotes: 'You gather information for documentation. Read source code, existing docs, and tests. Post findings to post_info() with tags.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
+      { name: 'writer', cli: 'claude', role: 'worker', ceoNotes: 'You write documentation. Use read_info() to access research findings. send_message() to the reviewer when a section is complete.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review documentation for accuracy, clarity, and completeness. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+    ]
+  },
+  {
+    name: 'Rapid Prototyper',
+    description: '1 architect (Opus) + 2 builders (Sonnet). Architecture-first rapid development.',
+    requiredClis: ['claude'],
+    agents: [
+      { name: 'architect', cli: 'claude', role: 'orchestrator', ceoNotes: 'You design the architecture first. Post the design to post_info() with tag "architecture". Then break implementation into tasks via post_task().', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'builder-1', cli: 'claude', role: 'worker', ceoNotes: 'You build what the architect designs. Check read_info() for architecture specs, then read_tasks() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'builder-2', cli: 'claude', role: 'worker', ceoNotes: 'You build what the architect designs. Check read_info() for architecture specs, then read_tasks() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+    ]
+  },
+  {
+    name: 'Claude + Codex',
+    description: 'Claude Opus orchestrates, Codex o4-mini implements. Best of both ecosystems.',
+    requiredClis: ['claude', 'codex'],
+    agents: [
+      { name: 'lead', cli: 'claude', role: 'orchestrator', ceoNotes: 'You orchestrate. Break tasks down and delegate to the coder via post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'coder', cli: 'codex', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() and get_messages() for assignments from the lead.', shell: 'powershell', admin: false, autoMode: true, model: '' },
+    ]
+  },
+  {
+    name: 'Claude + Kimi',
+    description: 'Claude plans and coordinates, Kimi K2.5 researches. Dual-brain research team.',
+    requiredClis: ['claude', 'kimi'],
+    agents: [
+      { name: 'planner', cli: 'claude', role: 'orchestrator', ceoNotes: 'You plan research strategy. Break questions into sub-questions. Delegate to the researcher via post_task().', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'researcher', cli: 'kimi', role: 'researcher', ceoNotes: 'You research deeply. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'kimi-k2.5' },
+    ]
+  },
+  {
+    name: 'Claude + Gemini',
+    description: 'Claude orchestrates, Gemini 2.5 Pro researches. Google knowledge + Anthropic reasoning.',
+    requiredClis: ['claude', 'gemini'],
+    agents: [
+      { name: 'lead', cli: 'claude', role: 'orchestrator', ceoNotes: 'You coordinate. Delegate research tasks to the researcher. Synthesize findings.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'researcher', cli: 'gemini', role: 'researcher', ceoNotes: 'You research using your broad knowledge. Check read_tasks() for assignments. Post findings to post_info().', shell: 'powershell', admin: false, autoMode: true, model: 'gemini-2.5-pro' },
+    ]
+  },
+  {
+    name: 'GPT-4o + DeepSeek',
+    description: 'GPT-4o orchestrator, DeepSeek coder. Cost-optimized multi-model team.',
+    requiredClis: ['openclaude'],
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You orchestrate the team. Break tasks down and delegate.', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4o', providerUrl: 'https://api.openai.com/v1' },
+      { name: 'coder', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+    ]
+  },
+  {
+    name: 'Full OpenAI',
+    description: 'GPT-4o lead + 2 GPT-4.1 workers. All OpenAI, maximum compatibility.',
+    requiredClis: ['openclaude'],
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You orchestrate. Break tasks down and delegate to workers.', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4o', providerUrl: 'https://api.openai.com/v1' },
+      { name: 'worker-1', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4.1', providerUrl: 'https://api.openai.com/v1' },
+      { name: 'worker-2', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4.1', providerUrl: 'https://api.openai.com/v1' },
+    ]
+  },
+  {
+    name: 'DeepSeek Squad',
+    description: '3 DeepSeek agents. Cheapest possible multi-agent team.',
+    requiredClis: ['openclaude'],
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate. Break tasks and delegate.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+      { name: 'worker-1', cli: 'openclaude', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for work.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+      { name: 'worker-2', cli: 'openclaude', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for work.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+    ]
+  },
+  {
+    name: 'Mixed Provider',
+    description: 'GPT-4o lead + DeepSeek coder + Claude reviewer. Best of three worlds.',
+    requiredClis: ['openclaude', 'claude'],
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You orchestrate. Delegate coding to the coder, review requests to the reviewer.', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4o', providerUrl: 'https://api.openai.com/v1' },
+      { name: 'coder', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement code. Check read_tasks() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code. Use get_agent_output() to inspect work. send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+    ]
+  },
+  {
+    name: 'OpenRouter Mix',
+    description: 'Via OpenRouter: access multiple models with a single API key.',
+    requiredClis: ['openclaude'],
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You orchestrate. Delegate tasks.', shell: 'powershell', admin: false, autoMode: true, model: 'openai/gpt-4o', providerUrl: 'https://openrouter.ai/api/v1' },
+      { name: 'coder', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement. Check read_tasks() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek/deepseek-chat', providerUrl: 'https://openrouter.ai/api/v1' },
+    ]
+  },
+  {
+    name: 'Ollama Local',
+    description: '2 Llama 3 agents running locally via Ollama. Fully offline, no API keys needed.',
+    requiredClis: ['openclaude'],
+    agents: [
+      { name: 'orchestrator', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate local agents. Break tasks and delegate.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
+      { name: 'worker-1', cli: 'openclaude', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
+    ]
+  },
+  {
+    name: 'Hybrid Local + Cloud',
+    description: 'Ollama worker (free, local) + Claude Opus orchestrator (smart, cloud).',
+    requiredClis: ['openclaude', 'claude'],
+    agents: [
+      { name: 'orchestrator', cli: 'claude', role: 'orchestrator', ceoNotes: 'You orchestrate. The worker runs locally and is slower — give clear, specific instructions.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'worker', cli: 'openclaude', role: 'worker', ceoNotes: 'Check read_tasks() and get_messages() for assignments. You run locally.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
     ]
   },
 ]
+
+const ALL_CLIS = ['claude', 'codex', 'kimi', 'gemini', 'openclaude']
+const CLI_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  kimi: 'Kimi',
+  gemini: 'Gemini',
+  openclaude: 'OpenClaude',
+}
 
 export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose }: PresetDialogProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<Tab>('save')
@@ -81,11 +218,35 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
   const [error, setError] = useState<string | null>(null)
   const [showCwdPrompt, setShowCwdPrompt] = useState(false)
   const [templateToLoad, setTemplateToLoad] = useState<PresetTemplate | null>(null)
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [cliFilters, setCliFilters] = useState<Set<string>>(new Set())
+
+  const filteredTemplates = BUILT_IN_TEMPLATES.filter(t => {
+    if (templateSearch) {
+      const q = templateSearch.toLowerCase()
+      if (!t.name.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) return false
+    }
+    if (cliFilters.size > 0) {
+      if (!t.requiredClis.every(cli => cliFilters.has(cli))) return false
+    }
+    return true
+  })
+
+  const toggleCliFilter = (cli: string) => {
+    setCliFilters(prev => {
+      const next = new Set(prev)
+      if (next.has(cli)) next.delete(cli)
+      else next.add(cli)
+      return next
+    })
+  }
 
   // Reset selection and load presets list when tab changes
   useEffect(() => {
     setSelectedPreset(null)
     setTemplateToLoad(null)
+    setTemplateSearch('')
+    setCliFilters(new Set())
     if (activeTab === 'load') {
       loadPresetsList()
     }
@@ -382,32 +543,79 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
 
         {activeTab === 'templates' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {BUILT_IN_TEMPLATES.map(template => (
-              <div
-                key={template.name}
-                onClick={() => {
-                  setSelectedPreset(template.name)
-                  setTemplateToLoad(template)
-                }}
-                style={selectedPreset === template.name && activeTab === 'templates' ? selectedPresetItemStyle : presetItemStyle}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '13px', color: '#e0e0e0', marginBottom: '2px' }}>{template.name}</div>
-                  <div style={{ fontSize: '11px', color: '#666' }}>{template.description}</div>
-                  <div style={{ fontSize: '11px', color: '#555', marginTop: '2px' }}>
-                    {template.agents.length} agent{template.agents.length !== 1 ? 's' : ''}: {template.agents.map(a => a.name).join(', ')}
-                  </div>
+            <input
+              value={templateSearch}
+              onChange={e => setTemplateSearch(e.target.value)}
+              placeholder="Search templates..."
+              style={inputStyle}
+            />
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {ALL_CLIS.map(cli => (
+                <button
+                  key={cli}
+                  onClick={() => toggleCliFilter(cli)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    borderRadius: '12px',
+                    border: cliFilters.has(cli) ? '1px solid #4a9eff' : '1px solid #444',
+                    backgroundColor: cliFilters.has(cli) ? '#1e3a5f' : '#2a2a2a',
+                    color: cliFilters.has(cli) ? '#8cc4ff' : '#888',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {CLI_LABELS[cli]}
+                </button>
+              ))}
+              {cliFilters.size > 0 && (
+                <button
+                  onClick={() => setCliFilters(new Set())}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    borderRadius: '12px',
+                    border: '1px solid #444',
+                    backgroundColor: 'transparent',
+                    color: '#666',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div style={{ maxHeight: '320px', overflow: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {filteredTemplates.length === 0 ? (
+                <div style={{ color: '#555', textAlign: 'center', padding: '20px 0' }}>
+                  No templates match your filters.
                 </div>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              ) : (
+                filteredTemplates.map(template => (
+                  <div
+                    key={template.name}
+                    onClick={() => {
+                      setSelectedPreset(template.name)
+                      setTemplateToLoad(template)
+                    }}
+                    style={selectedPreset === template.name && activeTab === 'templates' ? selectedPresetItemStyle : presetItemStyle}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', color: '#e0e0e0', marginBottom: '2px' }}>{template.name}</div>
+                      <div style={{ fontSize: '11px', color: '#666' }}>{template.description}</div>
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '3px' }}>
+                        {template.agents.length} agent{template.agents.length !== 1 ? 's' : ''}
+                        {' \u00B7 '}
+                        Requires: {template.requiredClis.map(c => CLI_LABELS[c] || c).join(', ')}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
               <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
               <button
-                onClick={() => {
-                  if (templateToLoad) {
-                    setShowCwdPrompt(true)
-                  }
-                }}
+                onClick={() => { if (templateToLoad) setShowCwdPrompt(true) }}
                 disabled={!templateToLoad}
                 style={loadBtnStyle}
               >
