@@ -9,7 +9,8 @@ interface Message {
 }
 
 declare const electronAPI: {
-  getHubInfo: () => Promise<{ port: number; secret: string }>
+  hubSendMessage: (from: string, to: string, message: string) => Promise<any>
+  hubGetMessageHistory: (agent?: string, limit?: number) => Promise<Message[]>
 }
 
 interface RacAgentChatProps {
@@ -20,49 +21,36 @@ export function RacAgentChat({ agentName }: RacAgentChatProps): React.ReactEleme
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [hubInfo, setHubInfo] = useState<{ port: number; secret: string } | null>(null)
-
-  useEffect(() => {
-    electronAPI.getHubInfo().then(setHubInfo)
-  }, [])
 
   const fetchMessages = useCallback(async () => {
-    if (!hubInfo) return
     try {
-      const res = await fetch(`http://127.0.0.1:${hubInfo.port}/messages/history?agent=${encodeURIComponent(agentName)}&limit=50`, {
-        headers: { 'Authorization': `Bearer ${hubInfo.secret}` }
-      })
-      if (res.ok) {
-        const msgs = await res.json()
-        setMessages(msgs)
-      }
+      const msgs = await electronAPI.hubGetMessageHistory(agentName, 50)
+      setMessages(msgs)
     } catch { /* hub unreachable */ }
-  }, [hubInfo, agentName])
+  }, [agentName])
 
   useEffect(() => {
-    if (!hubInfo) return
     fetchMessages()
     const interval = setInterval(fetchMessages, 3000)
     return () => clearInterval(interval)
-  }, [hubInfo, fetchMessages])
+  }, [fetchMessages])
 
   const handleSend = async () => {
-    if (!input.trim() || !hubInfo) return
+    if (!input.trim()) return
     setSending(true)
     try {
-      await fetch(`http://127.0.0.1:${hubInfo.port}/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${hubInfo.secret}`
-        },
-        body: JSON.stringify({ from: 'user', to: agentName, message: input.trim() })
-      })
+      await electronAPI.hubSendMessage('user', agentName, input.trim())
       setInput('')
-      fetchMessages()
+      // Immediate refresh to show the sent message
+      setTimeout(fetchMessages, 500)
     } catch { /* failed */ }
     setSending(false)
   }
+
+  // Sort messages chronologically (oldest first, newest at bottom)
+  const sortedMessages = [...messages].sort((a, b) =>
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  )
 
   return (
     <div style={{
@@ -84,12 +72,13 @@ export function RacAgentChat({ agentName }: RacAgentChatProps): React.ReactEleme
         flex: 1, overflow: 'auto', padding: '8px',
         display: 'flex', flexDirection: 'column', gap: '4px'
       }}>
-        {messages.length === 0 ? (
+        {sortedMessages.length === 0 ? (
           <div style={{ color: '#555', textAlign: 'center', padding: '20px 0' }}>
-            No messages yet. Send a task to this agent below.
+            No messages yet. Send a task to this agent below,{'\n'}
+            or have your orchestrator send_message("{agentName}", "...").
           </div>
         ) : (
-          [...messages].reverse().map(msg => (
+          sortedMessages.map(msg => (
             <div key={msg.id} style={{
               padding: '6px 8px',
               backgroundColor: msg.from === agentName ? '#1a2a3a' : '#252525',

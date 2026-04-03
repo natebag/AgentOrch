@@ -31,7 +31,7 @@ describe('Hub HTTP Server', () => {
     expect(res.status).toBe(401)
   })
 
-  it('registers an agent and lists it', async () => {
+  it('registers an agent and lists it (ceoNotes stripped)', async () => {
     const reg = await api('/agents/register', {
       method: 'POST',
       body: JSON.stringify({
@@ -45,9 +45,28 @@ describe('Hub HTTP Server', () => {
     const list = await api('/agents')
     expect(list.body).toHaveLength(1)
     expect(list.body[0].name).toBe('orchestrator')
+    // ceoNotes should be stripped from the list endpoint
+    expect(list.body[0].ceoNotes).toBeUndefined()
   })
 
-  it('sends and retrieves messages', async () => {
+  it('upserts on duplicate registration instead of throwing', async () => {
+    // Re-register the same agent with updated role
+    const reg = await api('/agents/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: 'a1', name: 'orchestrator', cli: 'claude',
+        cwd: '/tmp', role: 'Lead Coordinator', ceoNotes: 'Updated.', shell: 'powershell', admin: false, autoMode: false
+      })
+    })
+    expect(reg.status).toBe(200)
+    expect(reg.body.role).toBe('Lead Coordinator')
+
+    // Should still be just 1 agent, not 2
+    const list = await api('/agents')
+    expect(list.body).toHaveLength(1)
+  })
+
+  it('sends and retrieves messages (legacy consume-on-read)', async () => {
     await api('/agents/register', {
       method: 'POST',
       body: JSON.stringify({
@@ -62,6 +81,7 @@ describe('Hub HTTP Server', () => {
     })
     expect(send.body.status).toBe('delivered')
 
+    // Default peek=false consumes the queue
     const get = await api('/messages/worker-1')
     expect(get.body).toHaveLength(1)
     expect(get.body[0].message).toBe('do the thing')
@@ -70,9 +90,37 @@ describe('Hub HTTP Server', () => {
     expect(get2.body).toHaveLength(0)
   })
 
+  it('peek mode returns messages without clearing queue', async () => {
+    await api('/messages/send', {
+      method: 'POST',
+      body: JSON.stringify({ from: 'orchestrator', to: 'worker-1', message: 'peek test' })
+    })
+
+    // Peek: messages stay in queue
+    const peek1 = await api('/messages/worker-1?peek=true')
+    expect(peek1.body).toHaveLength(1)
+    expect(peek1.body[0].message).toBe('peek test')
+
+    // Second peek: still there
+    const peek2 = await api('/messages/worker-1?peek=true')
+    expect(peek2.body).toHaveLength(1)
+
+    // Ack: remove the message
+    const ack = await api('/messages/worker-1/ack', {
+      method: 'POST',
+      body: JSON.stringify({ messageIds: [peek2.body[0].id] })
+    })
+    expect(ack.body.acknowledged).toBe(1)
+
+    // Queue is now empty
+    const get3 = await api('/messages/worker-1?peek=true')
+    expect(get3.body).toHaveLength(0)
+  })
+
   it('returns CEO notes for an agent', async () => {
     const notes = await api('/agents/orchestrator/ceo-notes')
-    expect(notes.body.ceoNotes).toBe('You lead.')
+    // After upsert test, ceoNotes was updated to 'Updated.'
+    expect(notes.body.ceoNotes).toBe('Updated.')
   })
 
   it('broadcasts message to all agents except sender', async () => {
@@ -234,6 +282,83 @@ describe('Pinboard API', () => {
     expect(task.status).toBe('completed')
     expect(task.result).toBe('Deployed successfully')
     expect(task.claimedBy).toBe('worker-1')
+  })
+
+  it('tracks createdBy when posting a task', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Created by test', description: 'Testing createdBy', from: 'orchestrator' })
+    })
+    expect(post.status).toBe(200)
+    expect(post.body.createdBy).toBe('orchestrator')
+
+    const list = await api('/pinboard/tasks')
+    const task = list.body.find((t: any) => t.title === 'Created by test')
+    expect(task.createdBy).toBe('orchestrator')
+  })
+
+  it('gets a single task by ID', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Single fetch', description: 'Get by ID test' })
+    })
+    const taskId = post.body.id
+
+    const get = await api(`/pinboard/tasks/${taskId}`)
+    expect(get.status).toBe(200)
+    expect(get.body.title).toBe('Single fetch')
+    expect(get.body.id).toBe(taskId)
+  })
+
+  it('returns 404 for unknown task ID', async () => {
+    const get = await api('/pinboard/tasks/nonexistent-id')
+    expect(get.status).toBe(404)
+  })
+
+  it('abandons a claimed task', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Abandon test', description: 'Will be abandoned' })
+    })
+    const taskId = post.body.id
+
+    // Claim it
+    await api(`/pinboard/tasks/${taskId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-1' })
+    })
+
+    // Abandon it
+    const abandon = await api(`/pinboard/tasks/${taskId}/abandon`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    })
+    expect(abandon.status).toBe(200)
+    expect(abandon.body.status).toBe('ok')
+
+    // Task is now open again
+    const task = await api(`/pinboard/tasks/${taskId}`)
+    expect(task.body.status).toBe('open')
+    expect(task.body.claimedBy).toBeNull()
+
+    // Another agent can claim it
+    const reclaim = await api(`/pinboard/tasks/${taskId}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ from: 'worker-2' })
+    })
+    expect(reclaim.status).toBe(200)
+  })
+
+  it('rejects abandoning an unclaimed task', async () => {
+    const post = await api('/pinboard/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Never claimed', description: 'Open task' })
+    })
+    const abandon = await api(`/pinboard/tasks/${post.body.id}/abandon`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    })
+    expect(abandon.status).toBe(409)
   })
 })
 

@@ -766,6 +766,19 @@ function setupIPC(): void {
   })
 
   ipcMain.handle(IPC.RAC_GET_SESSIONS, () => racClient.getActiveSessions())
+
+  // Hub messaging from renderer (for R.A.C. chat panel)
+  ipcMain.handle(IPC.HUB_SEND_MESSAGE, (_event, from: string, to: string, message: string) => {
+    if (!hub) return { status: 'error', detail: 'No project open' }
+    return hub.messages.send(from, to, message, true)
+  })
+
+  ipcMain.handle(IPC.HUB_GET_MESSAGE_HISTORY, (_event, agent?: string, limit?: number) => {
+    if (!hub || !currentDb) return []
+    const { MessageStore } = require('./db/message-store')
+    const store = new MessageStore(currentDb)
+    return store.getMessageHistory(agent, limit || 50)
+  })
 }
 
 async function main(): Promise<void> {

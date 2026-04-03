@@ -75,4 +75,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   racRent: (slotId: string, renterName: string) => ipcRenderer.invoke(IPC.RAC_RENT, slotId, renterName),
   racRelease: (sessionId: string) => ipcRenderer.invoke(IPC.RAC_RELEASE, sessionId),
   racGetSessions: () => ipcRenderer.invoke(IPC.RAC_GET_SESSIONS),
+  // Hub messaging (for R.A.C. chat panel)
+  hubSendMessage: (from: string, to: string, message: string) => ipcRenderer.invoke(IPC.HUB_SEND_MESSAGE, from, to, message),
+  hubGetMessageHistory: (agent?: string, limit?: number) => ipcRenderer.invoke(IPC.HUB_GET_MESSAGE_HISTORY, agent, limit),
 })

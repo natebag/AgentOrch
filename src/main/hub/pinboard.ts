@@ -6,6 +6,7 @@ export interface PinboardTask {
   description: string
   priority: 'low' | 'medium' | 'high'
   status: 'open' | 'in_progress' | 'completed'
+  createdBy: string | null
   claimedBy: string | null
   result: string | null
   createdAt: string
@@ -16,13 +17,14 @@ export class Pinboard {
   onTaskCreated?: (task: PinboardTask) => void
   onTaskUpdated?: (task: PinboardTask) => void
 
-  postTask(title: string, description: string, priority: 'low' | 'medium' | 'high' = 'medium'): PinboardTask {
+  postTask(title: string, description: string, priority: 'low' | 'medium' | 'high' = 'medium', createdBy?: string): PinboardTask {
     const task: PinboardTask = {
       id: uuid(),
       title,
       description,
       priority,
       status: 'open',
+      createdBy: createdBy ?? null,
       claimedBy: null,
       result: null,
       createdAt: new Date().toISOString()
@@ -71,5 +73,27 @@ export class Pinboard {
     task.result = result ?? null
     this.onTaskUpdated?.(task)
     return { status: 'ok', detail: 'Task completed' }
+  }
+
+  abandonTask(taskId: string): { status: string; detail: string } {
+    const task = this.tasks.get(taskId)
+    if (!task) {
+      return { status: 'error', detail: `Task '${taskId}' not found` }
+    }
+    if (task.status === 'completed') {
+      return { status: 'error', detail: 'Cannot abandon a completed task' }
+    }
+    if (task.status === 'open') {
+      return { status: 'error', detail: 'Task is not claimed — nothing to abandon' }
+    }
+    const previousClaimer = task.claimedBy
+    task.status = 'open'
+    task.claimedBy = null
+    this.onTaskUpdated?.(task)
+    return { status: 'ok', detail: `Task abandoned by '${previousClaimer}', now open for claiming` }
+  }
+
+  getTask(taskId: string): PinboardTask | undefined {
+    return this.tasks.get(taskId)
   }
 }

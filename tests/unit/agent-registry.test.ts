@@ -29,9 +29,13 @@ describe('AgentRegistry', () => {
     expect(state.status).toBe('idle')
   })
 
-  it('rejects duplicate names', () => {
-    registry.register(makeConfig())
-    expect(() => registry.register(makeConfig({ id: 'test-2' }))).toThrow('already exists')
+  it('upserts on duplicate name instead of throwing', () => {
+    registry.register(makeConfig({ role: 'original' }))
+    const updated = registry.register(makeConfig({ id: 'test-2', role: 'updated' }))
+    expect(updated.role).toBe('updated')
+    expect(updated.status).toBe('idle')
+    // Should still be 1 agent, not 2
+    expect(registry.list()).toHaveLength(1)
   })
 
   it('lists all agents', () => {

@@ -8,14 +8,14 @@ export class PinboardStore {
 
   constructor(private db: Database.Database) {
     this.insertStmt = db.prepare(
-      `INSERT INTO pinboard_tasks (id, title, description, priority, status, claimed_by, result, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO pinboard_tasks (id, title, description, priority, status, created_by, claimed_by, result, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     this.updateStmt = db.prepare(
       `UPDATE pinboard_tasks SET status = ?, claimed_by = ?, result = ? WHERE id = ?`
     )
     this.loadStmt = db.prepare(
-      `SELECT id, title, description, priority, status, claimed_by AS claimedBy, result, created_at AS createdAt
+      `SELECT id, title, description, priority, status, created_by AS createdBy, claimed_by AS claimedBy, result, created_at AS createdAt
        FROM pinboard_tasks ORDER BY created_at ASC`
     )
   }
@@ -23,7 +23,7 @@ export class PinboardStore {
   saveTask(task: PinboardTask): void {
     this.insertStmt.run(
       task.id, task.title, task.description, task.priority,
-      task.status, task.claimedBy, task.result, task.createdAt
+      task.status, task.createdBy, task.claimedBy, task.result, task.createdAt
     )
   }
 

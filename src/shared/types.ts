@@ -98,6 +98,8 @@ export const IPC = {
   RAC_GET_SESSIONS: 'rac:get-sessions',
   RAC_SET_SERVER: 'rac:set-server',
   RAC_GET_SERVER: 'rac:get-server',
+  HUB_SEND_MESSAGE: 'hub:send-message',
+  HUB_GET_MESSAGE_HISTORY: 'hub:get-message-history',
 } as const
 
 export interface BuddyMessage {

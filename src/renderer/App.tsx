@@ -51,9 +51,21 @@ export function App(): React.ReactElement {
       removeWindow(windowId)
       return
     }
+    // R.A.C. agents: release the rental instead of killing a PTY
+    const agent = agents.find(a => a.id === windowId)
+    if (agent && agent.name.startsWith('rac-')) {
+      // Find the session to release
+      const sessions = await window.electronAPI.racGetSessions()
+      const session = sessions.find((s: any) => s.agentorch_agent === agent.name)
+      if (session) {
+        await window.electronAPI.racRelease(session.session_id)
+      }
+      removeWindow(windowId)
+      return
+    }
     await killAgent(windowId)
     removeWindow(windowId)
-  }, [killAgent, removeWindow])
+  }, [killAgent, removeWindow, agents])
 
   const handleAgentPillClick = useCallback((agentId: string) => {
     focusWindow(agentId)
