@@ -19,6 +19,7 @@ export function createDatabase(dbPath: string): Database.Database {
       description TEXT NOT NULL,
       priority TEXT NOT NULL DEFAULT 'medium',
       status TEXT NOT NULL DEFAULT 'open',
+      created_by TEXT,
       claimed_by TEXT,
       result TEXT,
       created_at TEXT NOT NULL
@@ -31,12 +32,10 @@ export function createDatabase(dbPath: string): Database.Database {
       tags TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
-
-    -- Clear previous session data so each launch starts fresh
-    DELETE FROM pinboard_tasks;
-    DELETE FROM info_entries;
-    DELETE FROM messages;
   `)
+
+  // Migrations for existing DBs — safe to fail if column already exists
+  try { db.exec('ALTER TABLE pinboard_tasks ADD COLUMN created_by TEXT') } catch { /* column exists */ }
 
   return db
 }
