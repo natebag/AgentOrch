@@ -76,10 +76,37 @@ function buildCliLaunchCommands(
 function buildInitialPrompt(config: AgentConfig): string {
   const lines = [
     `You are "${config.name}" (role: ${config.role}) in an AgentOrch workspace.`,
-    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes, get_agent_output, post_task, read_tasks, claim_task, complete_task, post_info, read_info.`,
+    `You have AgentOrch MCP tools: send_message, get_messages, get_agents, read_ceo_notes, get_agent_output, post_task, read_tasks, claim_task, complete_task, abandon_task, get_task, post_info, read_info, delete_info, update_info, update_status, get_message_history, ack_messages.`,
     `Call read_ceo_notes() now for your instructions, then get_messages() to check for tasks from the orchestrator.`,
   ]
   return lines.join(' ')
+}
+
+// Build a reconnect prompt that includes context about what the agent was doing before it crashed.
+function buildReconnectPrompt(config: AgentConfig): string {
+  const base = buildInitialPrompt(config)
+
+  const contextParts: string[] = []
+
+  // Check for claimed tasks
+  if (hub) {
+    const tasks = hub.pinboard.readTasks()
+    const claimed = tasks.filter(t => t.claimedBy === config.name && t.status === 'in_progress')
+    if (claimed.length > 0) {
+      const taskSummary = claimed.map(t => `"${t.title}" (${t.id})`).join(', ')
+      contextParts.push(`You had ${claimed.length} task(s) in progress before disconnecting: ${taskSummary}. Check their status with get_task() and continue or abandon them.`)
+    }
+
+    // Check for pending messages
+    const pending = hub.messages.getMessages(config.name, true) // peek
+    if (pending.length > 0) {
+      contextParts.push(`You have ${pending.length} unread message(s). Call get_messages() to read them.`)
+    }
+  }
+
+  if (contextParts.length === 0) return base
+
+  return `${base} RECONNECT CONTEXT: You were previously running but disconnected unexpectedly. ${contextParts.join(' ')}`
 }
 
 function injectPrompt(managed: ManagedPty, prompt: string, delayMs: number): void {
@@ -121,7 +148,7 @@ function reconnectAgent(config: AgentConfig): void {
   }
 
   hub.registry.register(config)
-  const initialPrompt = buildInitialPrompt(config)
+  const initialPrompt = buildReconnectPrompt(config)
   initialPrompts.set(config.id, initialPrompt)
   // Block prompt injection until CLI commands are sent
   hasReceivedInitialPrompt.add(config.id)
