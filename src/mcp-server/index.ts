@@ -29,7 +29,19 @@ async function hubFetch(path: string, opts: RequestInit = {}): Promise<any> {
       ...opts.headers
     }
   })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Hub returned ${res.status}: ${body}`)
+  }
   return res.json()
+}
+
+function toolError(message: string) {
+  return { content: [{ type: 'text' as const, text: message }], isError: true as const }
+}
+
+function toolResult(data: unknown) {
+  return { content: [{ type: 'text' as const, text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] }
 }
 
 const server = new McpServer({
@@ -45,24 +57,52 @@ server.tool(
     message: z.string().describe('The message to send')
   },
   async ({ to, message }) => {
-    const result = await hubFetch('/messages/send', {
-      method: 'POST',
-      body: JSON.stringify({ from: AGENT_NAME, to, message })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch('/messages/send', {
+        method: 'POST',
+        body: JSON.stringify({ from: AGENT_NAME, to, message })
+      })
+      if (result.status === 'error') return toolError(result.detail || 'Send failed')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to send message: ${err.message}`)
+    }
   }
 )
 
 server.tool(
   'get_messages',
-  'Check for messages sent to you by other agents. Returns all queued messages and clears the queue. Call this after completing each task to check for new work.',
-  {},
-  async () => {
-    const messages = await hubFetch(`/messages/${AGENT_NAME}`)
-    if (messages.length === 0) {
-      return { content: [{ type: 'text', text: 'No new messages.' }] }
+  'Check for messages sent to you by other agents. By default, messages are returned without clearing the queue (peek mode). Call ack_messages() with the message IDs to remove them after processing.',
+  {
+    peek: z.boolean().optional().default(true).describe('If true (default), messages stay in queue. Set to false to clear on read (legacy behavior).')
+  },
+  async ({ peek }) => {
+    try {
+      const messages = await hubFetch(`/messages/${encodeURIComponent(AGENT_NAME)}?peek=${peek}`)
+      if (messages.length === 0) return toolResult('No new messages.')
+      return toolResult(messages)
+    } catch (err: any) {
+      return toolError(`Failed to get messages: ${err.message}`)
     }
-    return { content: [{ type: 'text', text: JSON.stringify(messages, null, 2) }] }
+  }
+)
+
+server.tool(
+  'ack_messages',
+  'Acknowledge and remove messages from your queue after processing them. Call this after successfully handling messages from get_messages().',
+  {
+    message_ids: z.array(z.string()).describe('Array of message IDs to acknowledge')
+  },
+  async ({ message_ids }) => {
+    try {
+      const result = await hubFetch(`/messages/${encodeURIComponent(AGENT_NAME)}/ack`, {
+        method: 'POST',
+        body: JSON.stringify({ messageIds: message_ids })
+      })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to acknowledge messages: ${err.message}`)
+    }
   }
 )
 
@@ -71,8 +111,12 @@ server.tool(
   'List all agents in the workspace with their names, roles, CLI types, CEO notes, and current status.',
   {},
   async () => {
-    const agents = await hubFetch('/agents')
-    return { content: [{ type: 'text', text: JSON.stringify(agents, null, 2) }] }
+    try {
+      const agents = await hubFetch('/agents')
+      return toolResult(agents)
+    } catch (err: any) {
+      return toolError(`Failed to list agents: ${err.message}`)
+    }
   }
 )
 
@@ -81,8 +125,12 @@ server.tool(
   'Re-read your CEO notes and role description. Useful for re-grounding after /clear or when you need to recall your instructions.',
   {},
   async () => {
-    const notes = await hubFetch(`/agents/${AGENT_NAME}/ceo-notes`)
-    return { content: [{ type: 'text', text: JSON.stringify(notes, null, 2) }] }
+    try {
+      const notes = await hubFetch(`/agents/${encodeURIComponent(AGENT_NAME)}/ceo-notes`)
+      return toolResult(notes)
+    } catch (err: any) {
+      return toolError(`Failed to read CEO notes: ${err.message}`)
+    }
   }
 )
 
@@ -94,11 +142,12 @@ server.tool(
     lines: z.number().optional().default(50).describe('Number of lines to retrieve (default 50, max 1000)')
   },
   async ({ agent, lines }) => {
-    const result = await hubFetch(`/agents/${encodeURIComponent(agent)}/output?lines=${lines}`)
-    if (result.error) {
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch(`/agents/${encodeURIComponent(agent)}/output?lines=${lines}`)
+      return toolResult(result.lines.join('\n'))
+    } catch (err: any) {
+      return toolError(`Failed to get agent output: ${err.message}`)
     }
-    return { content: [{ type: 'text', text: result.lines.join('\n') }] }
   }
 )
 
@@ -111,11 +160,15 @@ server.tool(
     priority: z.enum(['low', 'medium', 'high']).optional().default('medium').describe('Task priority (default: medium)')
   },
   async ({ title, description, priority }) => {
-    const result = await hubFetch('/pinboard/tasks', {
-      method: 'POST',
-      body: JSON.stringify({ title, description, priority, from: AGENT_NAME })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch('/pinboard/tasks', {
+        method: 'POST',
+        body: JSON.stringify({ title, description, priority, from: AGENT_NAME })
+      })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to post task: ${err.message}`)
+    }
   }
 )
 
@@ -124,11 +177,13 @@ server.tool(
   'List all tasks on the shared pinboard. Shows id, title, description, priority, status, claimedBy, result, and createdAt.',
   {},
   async () => {
-    const tasks = await hubFetch('/pinboard/tasks')
-    if (tasks.length === 0) {
-      return { content: [{ type: 'text', text: 'No tasks on the pinboard.' }] }
+    try {
+      const tasks = await hubFetch('/pinboard/tasks')
+      if (tasks.length === 0) return toolResult('No tasks on the pinboard.')
+      return toolResult(tasks)
+    } catch (err: any) {
+      return toolError(`Failed to read tasks: ${err.message}`)
     }
-    return { content: [{ type: 'text', text: JSON.stringify(tasks, null, 2) }] }
   }
 )
 
@@ -139,11 +194,16 @@ server.tool(
     task_id: z.string().describe('ID of the task to claim')
   },
   async ({ task_id }) => {
-    const result = await hubFetch(`/pinboard/tasks/${task_id}/claim`, {
-      method: 'POST',
-      body: JSON.stringify({ from: AGENT_NAME })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch(`/pinboard/tasks/${task_id}/claim`, {
+        method: 'POST',
+        body: JSON.stringify({ from: AGENT_NAME })
+      })
+      if (result.status === 'error') return toolError(result.detail || 'Claim failed')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to claim task: ${err.message}`)
+    }
   }
 )
 
@@ -155,11 +215,16 @@ server.tool(
     result: z.string().optional().describe('Optional result or summary of the work done')
   },
   async ({ task_id, result }) => {
-    const res = await hubFetch(`/pinboard/tasks/${task_id}/complete`, {
-      method: 'POST',
-      body: JSON.stringify({ from: AGENT_NAME, result })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(res, null, 2) }] }
+    try {
+      const res = await hubFetch(`/pinboard/tasks/${task_id}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ from: AGENT_NAME, result })
+      })
+      if (res.status === 'error') return toolError(res.detail || 'Complete failed')
+      return toolResult(res)
+    } catch (err: any) {
+      return toolError(`Failed to complete task: ${err.message}`)
+    }
   }
 )
 
@@ -170,11 +235,16 @@ server.tool(
     message: z.string().describe('The message to broadcast')
   },
   async ({ message }) => {
-    const result = await hubFetch('/messages/broadcast', {
-      method: 'POST',
-      body: JSON.stringify({ from: AGENT_NAME, message })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch('/messages/broadcast', {
+        method: 'POST',
+        body: JSON.stringify({ from: AGENT_NAME, message })
+      })
+      if (result.error) return toolError(result.error)
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to broadcast: ${err.message}`)
+    }
   }
 )
 
@@ -186,11 +256,15 @@ server.tool(
     tags: z.array(z.string()).optional().describe('Optional tags to categorize the note')
   },
   async ({ note, tags }) => {
-    const result = await hubFetch('/info', {
-      method: 'POST',
-      body: JSON.stringify({ from: AGENT_NAME, note, tags })
-    })
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    try {
+      const result = await hubFetch('/info', {
+        method: 'POST',
+        body: JSON.stringify({ from: AGENT_NAME, note, tags })
+      })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to post info: ${err.message}`)
+    }
   }
 )
 
@@ -201,12 +275,108 @@ server.tool(
     tags: z.array(z.string()).optional().describe('Optional tags to filter by (matches ANY tag)')
   },
   async ({ tags }) => {
-    const queryParams = tags && tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(','))}` : ''
-    const result = await hubFetch(`/info${queryParams}`)
-    if (result.length === 0) {
-      return { content: [{ type: 'text', text: 'No info entries found.' }] }
+    try {
+      const queryParams = tags && tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(','))}` : ''
+      const result = await hubFetch(`/info${queryParams}`)
+      if (result.length === 0) return toolResult('No info entries found.')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to read info: ${err.message}`)
     }
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+  }
+)
+
+server.tool(
+  'abandon_task',
+  'Abandon a claimed task, returning it to open status so another agent can pick it up. Use when you cannot complete a task.',
+  {
+    task_id: z.string().describe('ID of the task to abandon')
+  },
+  async ({ task_id }) => {
+    try {
+      const result = await hubFetch(`/pinboard/tasks/${task_id}/abandon`, {
+        method: 'POST',
+        body: JSON.stringify({})
+      })
+      if (result.status === 'error') return toolError(result.detail || 'Abandon failed')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to abandon task: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'get_task',
+  'Get a single task by ID. More efficient than read_tasks when you only need one task\'s status.',
+  {
+    task_id: z.string().describe('ID of the task to retrieve')
+  },
+  async ({ task_id }) => {
+    try {
+      const result = await hubFetch(`/pinboard/tasks/${task_id}`)
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to get task: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'get_message_history',
+  'Retrieve past message history from the database. Unlike get_messages (which shows unread queue), this shows all historical messages.',
+  {
+    agent: z.string().optional().describe('Filter by agent name (shows messages to/from this agent). Omit for all messages.'),
+    limit: z.number().optional().default(50).describe('Max messages to return (default 50, max 500)')
+  },
+  async ({ agent, limit }) => {
+    try {
+      const params = new URLSearchParams()
+      if (agent) params.set('agent', agent)
+      if (limit) params.set('limit', String(limit))
+      const query = params.toString() ? `?${params.toString()}` : ''
+      const result = await hubFetch(`/messages/history${query}`)
+      if (result.length === 0) return toolResult('No message history found.')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to get message history: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'delete_info',
+  'Delete an info channel entry by ID. Use to remove stale or incorrect information.',
+  {
+    id: z.string().describe('ID of the info entry to delete')
+  },
+  async ({ id }) => {
+    try {
+      const result = await hubFetch(`/info/${id}`, { method: 'DELETE' })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to delete info: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
+  'update_info',
+  'Update the note text of an existing info channel entry.',
+  {
+    id: z.string().describe('ID of the info entry to update'),
+    note: z.string().describe('The updated note text')
+  },
+  async ({ id, note }) => {
+    try {
+      const result = await hubFetch(`/info/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note })
+      })
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to update info: ${err.message}`)
+    }
   }
 )
 

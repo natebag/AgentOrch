@@ -4,6 +4,7 @@ import type { MessageRouter } from './message-router'
 import type { Pinboard } from './pinboard'
 import type { InfoChannel } from './info-channel'
 import type { AgentConfig } from '../../shared/types'
+import type { MessageStore } from '../db/message-store'
 
 export type OutputAccessor = (agentName: string, lines: number) => string[] | null
 
@@ -12,12 +13,14 @@ export function createRoutes(
   messages: MessageRouter,
   outputRef: { accessor: OutputAccessor | null },
   pinboard: Pinboard,
-  infoChannel: InfoChannel
+  infoChannel: InfoChannel,
+  messageStoreRef: { store: MessageStore | null } = { store: null }
 ): Router {
   const router = Router()
 
   router.get('/agents', (_req: Request, res: Response) => {
-    res.json(registry.list())
+    const agents = registry.list().map(({ ceoNotes, ...rest }) => rest)
+    res.json(agents)
   })
 
   router.post('/agents/register', (req: Request, res: Response) => {
@@ -52,20 +55,31 @@ export function createRoutes(
   })
 
   router.get('/messages/:name', (req: Request, res: Response) => {
-    const msgs = messages.getMessages(req.params.name)
+    const peek = req.query.peek === 'true'
+    const msgs = messages.getMessages(req.params.name, peek)
     res.json(msgs)
+  })
+
+  router.post('/messages/:name/ack', (req: Request, res: Response) => {
+    const { messageIds } = req.body
+    if (!Array.isArray(messageIds)) {
+      res.status(400).json({ error: 'messageIds array is required' })
+      return
+    }
+    const acked = messages.ackMessages(req.params.name, messageIds)
+    res.json({ acknowledged: acked })
   })
 
   // --- Pinboard routes ---
 
   router.post('/pinboard/tasks', (req: Request, res: Response) => {
-    const { title, description, priority } = req.body
+    const { title, description, priority, from } = req.body
     if (!title || !description) {
       res.status(400).json({ error: 'title and description are required' })
       return
     }
-    const task = pinboard.postTask(title, description, priority)
-    res.json({ id: task.id, title: task.title })
+    const task = pinboard.postTask(title, description, priority, from)
+    res.json({ id: task.id, title: task.title, createdBy: task.createdBy })
   })
 
   router.get('/pinboard/tasks', (_req: Request, res: Response) => {
@@ -92,6 +106,37 @@ export function createRoutes(
     res.json(outcome)
   })
 
+  router.post('/pinboard/tasks/:id/abandon', (req: Request, res: Response) => {
+    const result = pinboard.abandonTask(req.params.id)
+    if (result.status === 'error') {
+      res.status(409).json(result)
+      return
+    }
+    res.json(result)
+  })
+
+  router.get('/pinboard/tasks/:id', (req: Request, res: Response) => {
+    const task = pinboard.getTask(req.params.id)
+    if (!task) {
+      res.status(404).json({ error: `Task '${req.params.id}' not found` })
+      return
+    }
+    res.json(task)
+  })
+
+  // --- Message History route ---
+
+  router.get('/messages/history', (req: Request, res: Response) => {
+    if (!messageStoreRef.store) {
+      res.status(503).json({ error: 'Message history not available' })
+      return
+    }
+    const agent = req.query.agent as string | undefined
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500)
+    const history = messageStoreRef.store.getMessageHistory(agent, limit)
+    res.json(history)
+  })
+
   // --- Info Channel routes ---
 
   router.post('/info', (req: Request, res: Response) => {
@@ -113,6 +158,33 @@ export function createRoutes(
     const tags = tagsParam ? tagsParam.split(',').filter(Boolean) : undefined
     const entries = infoChannel.readInfo(tags)
     res.json(entries)
+  })
+
+  router.delete('/info/:id', (req: Request, res: Response) => {
+    const deleted = infoChannel.deleteInfo(req.params.id)
+    if (!deleted) {
+      res.status(404).json({ error: `Info entry '${req.params.id}' not found` })
+      return
+    }
+    res.json({ status: 'ok' })
+  })
+
+  router.patch('/info/:id', (req: Request, res: Response) => {
+    try {
+      const { note } = req.body
+      if (!note) {
+        res.status(400).json({ error: 'note is required' })
+        return
+      }
+      const entry = infoChannel.updateInfo(req.params.id, note)
+      if (!entry) {
+        res.status(404).json({ error: `Info entry '${req.params.id}' not found` })
+        return
+      }
+      res.json(entry)
+    } catch (err: any) {
+      res.status(400).json({ error: err.message })
+    }
   })
 
   // --- Output route ---

@@ -7,6 +7,8 @@ const MAX_ENTRIES = 500
 export class InfoChannel {
   private entries: InfoEntry[] = []
   onEntryAdded?: (entry: InfoEntry) => void
+  onEntryUpdated?: (entry: InfoEntry) => void
+  onEntryDeleted?: (id: string) => void
 
   postInfo(from: string, note: string, tags: string[] = []): InfoEntry {
     if (note.length > MAX_NOTE_SIZE) {
@@ -41,6 +43,25 @@ export class InfoChannel {
     return this.entries.filter(entry => 
       entry.tags.some(tag => tags.includes(tag))
     )
+  }
+
+  deleteInfo(id: string): boolean {
+    const idx = this.entries.findIndex(e => e.id === id)
+    if (idx === -1) return false
+    this.entries.splice(idx, 1)
+    this.onEntryDeleted?.(id)
+    return true
+  }
+
+  updateInfo(id: string, note: string): InfoEntry | null {
+    const entry = this.entries.find(e => e.id === id)
+    if (!entry) return null
+    if (note.length > MAX_NOTE_SIZE) {
+      throw new Error(`Note exceeds max size of ${MAX_NOTE_SIZE} bytes`)
+    }
+    entry.note = note
+    this.onEntryUpdated?.(entry)
+    return entry
   }
 
   loadEntries(entries: InfoEntry[]): void {
