@@ -299,7 +299,6 @@ async function openProject(projectPath: string): Promise<void> {
   if (hub) await closeProject()
 
   projectManager.initProject(projectPath)
-  setPresetsDir(projectManager.presetsDir)
 
   // Initialize SQLite persistence at project path
   const db = createDatabase(projectManager.dbPath)
@@ -658,6 +657,10 @@ async function main(): Promise<void> {
   await app.whenReady()
 
   projectManager = new ProjectManager(app.getPath('userData'))
+
+  // Global presets directory — follows user across projects
+  const globalPresetsDir = path.join(app.getPath('userData'), 'presets')
+  setPresetsDir(globalPresetsDir)
 
   setupIPC()
   mainWindow = createWindow()
