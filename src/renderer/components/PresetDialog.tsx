@@ -16,7 +16,60 @@ interface PresetInfo {
   savedAt: string
 }
 
-type Tab = 'save' | 'load'
+type Tab = 'save' | 'load' | 'templates'
+
+interface PresetTemplate {
+  name: string
+  description: string
+  agents: Omit<AgentConfig, 'id' | 'cwd'>[]
+}
+
+const BUILT_IN_TEMPLATES: PresetTemplate[] = [
+  {
+    name: 'Orchestrator + Workers',
+    description: '1 orchestrator (Opus) directing 2 workers (Sonnet). Classic delegation pattern.',
+    agents: [
+      { name: 'orchestrator', cli: 'claude', role: 'orchestrator', ceoNotes: 'You are the lead. Break tasks into subtasks and delegate to workers. Synthesize their results. Use post_task() and send_message() to coordinate.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'worker-1', cli: 'claude', role: 'worker', ceoNotes: 'You are a worker. Check read_tasks() and get_messages() for assignments. Complete tasks and report back to the orchestrator.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'worker-2', cli: 'claude', role: 'worker', ceoNotes: 'You are a worker. Check read_tasks() and get_messages() for assignments. Complete tasks and report back to the orchestrator.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+    ]
+  },
+  {
+    name: 'Research Squad',
+    description: '1 orchestrator + 3 researchers. Deep research with parallel information gathering.',
+    agents: [
+      { name: 'lead', cli: 'claude', role: 'orchestrator', ceoNotes: 'You coordinate a research team. Break research questions into sub-questions. Assign to researchers via post_task(). Synthesize findings posted to the info channel.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+      { name: 'researcher-1', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'researcher-2', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'researcher-3', cli: 'claude', role: 'researcher', ceoNotes: 'You are a researcher. Check read_tasks() for research assignments. Post findings to post_info() with relevant tags. Be thorough and cite sources.', shell: 'powershell', admin: false, autoMode: true, model: 'haiku' },
+    ]
+  },
+  {
+    name: 'Code + Review',
+    description: '1 coder + 1 reviewer. Continuous code review workflow.',
+    agents: [
+      { name: 'coder', cli: 'claude', role: 'worker', ceoNotes: 'You write code. After completing each change, send_message() to the reviewer with a summary of what changed and why. Wait for feedback before proceeding.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code. When the coder messages you, use get_agent_output() to see their terminal, review the changes, and send_message() back with feedback. Be constructive but thorough.', shell: 'powershell', admin: false, autoMode: true, model: 'opus' },
+    ]
+  },
+  {
+    name: 'Multi-Model Team (OpenClaude)',
+    description: 'Mixed providers: GPT-4o orchestrator, DeepSeek coder, Claude reviewer. Requires OpenClaude installed.',
+    agents: [
+      { name: 'lead', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate the team. Delegate coding tasks to the coder and review requests to the reviewer. Use post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'gpt-4o', providerUrl: 'https://api.openai.com/v1' },
+      { name: 'coder', cli: 'openclaude', role: 'worker', ceoNotes: 'You implement code changes. Check read_tasks() for assignments. Post completed work summaries to the orchestrator.', shell: 'powershell', admin: false, autoMode: true, model: 'deepseek-chat', providerUrl: 'https://api.deepseek.com/v1' },
+      { name: 'reviewer', cli: 'claude', role: 'reviewer', ceoNotes: 'You review code changes. When asked, use get_agent_output() to inspect work and send_message() back with feedback.', shell: 'powershell', admin: false, autoMode: true, model: 'sonnet' },
+    ]
+  },
+  {
+    name: 'Local-Only (Ollama)',
+    description: 'All agents run locally via Ollama. No API keys needed. Requires OpenClaude + Ollama.',
+    agents: [
+      { name: 'orchestrator', cli: 'openclaude', role: 'orchestrator', ceoNotes: 'You coordinate local agents. Break tasks down and delegate. Use post_task() and send_message().', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
+      { name: 'worker-1', cli: 'openclaude', role: 'worker', ceoNotes: 'You are a worker. Check read_tasks() and get_messages() for assignments.', shell: 'powershell', admin: false, autoMode: true, model: 'llama3', providerUrl: 'http://localhost:11434/v1' },
+    ]
+  },
+]
 
 export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose }: PresetDialogProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<Tab>('save')
@@ -27,9 +80,12 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCwdPrompt, setShowCwdPrompt] = useState(false)
+  const [templateToLoad, setTemplateToLoad] = useState<PresetTemplate | null>(null)
 
-  // Load presets list on mount and when tab changes to load
+  // Reset selection and load presets list when tab changes
   useEffect(() => {
+    setSelectedPreset(null)
+    setTemplateToLoad(null)
     if (activeTab === 'load') {
       loadPresetsList()
     }
@@ -94,7 +150,9 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
         shell: a.shell,
         admin: a.admin,
         autoMode: a.autoMode,
-        promptRegex: a.promptRegex
+        promptRegex: a.promptRegex,
+        model: a.model,
+        experimental: a.experimental
       }))
 
       await window.electronAPI.savePreset(presetName.trim(), agentConfigs, windowPositions, canvas)
@@ -129,26 +187,33 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
   }
 
   const handleConfirmLoad = async () => {
-    if (!selectedPreset) return
-
     try {
       setLoading(true)
       setError(null)
-      const preset = await window.electronAPI.loadPreset(selectedPreset)
 
-      // Apply CWD override to all agents if specified
-      const configs = preset.agents.map(agent => ({
-        ...agent,
-        cwd: cwdOverride.trim() || agent.cwd
-      }))
+      let configs: Omit<AgentConfig, 'id'>[]
 
-      // Remove id from configs (onLoadAgents expects Omit<AgentConfig, 'id'>)
-      const configsWithoutId = configs.map(({ id, ...rest }) => rest)
+      if (templateToLoad && activeTab === 'templates') {
+        // Loading from built-in template
+        configs = templateToLoad.agents.map(agent => ({
+          ...agent,
+          cwd: cwdOverride.trim() || ''
+        }))
+      } else if (selectedPreset) {
+        // Loading from saved preset
+        const preset = await window.electronAPI.loadPreset(selectedPreset)
+        configs = preset.agents.map(({ id, ...rest }) => ({
+          ...rest,
+          cwd: cwdOverride.trim() || rest.cwd
+        }))
+      } else {
+        return
+      }
 
-      onLoadAgents(configsWithoutId)
+      onLoadAgents(configs)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load preset')
+      setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
@@ -174,7 +239,7 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
       <div style={overlayStyle}>
         <div style={{ ...modalStyle, width: '400px' }}>
           <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#e0e0e0' }}>
-            Load Preset: {selectedPreset}
+            {activeTab === 'templates' ? `Use Template: ${templateToLoad?.name}` : `Load Preset: ${selectedPreset}`}
           </h3>
           <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 12px 0' }}>
             Working directory for all agents:
@@ -230,6 +295,12 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
           >
             Load
           </button>
+          <button
+            onClick={() => setActiveTab('templates')}
+            style={activeTab === 'templates' ? activeTabStyle : tabStyle}
+          >
+            Templates
+          </button>
         </div>
 
         {error && (
@@ -238,7 +309,7 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
           </div>
         )}
 
-        {activeTab === 'save' ? (
+        {activeTab === 'save' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <label style={labelStyle}>
               Preset Name
@@ -263,7 +334,9 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
               </button>
             </div>
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'load' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {loading ? (
               <div style={{ color: '#666', textAlign: 'center', padding: '32px' }}>Loading presets...</div>
@@ -302,6 +375,43 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
                 style={loadBtnStyle}
               >
                 Load
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'templates' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {BUILT_IN_TEMPLATES.map(template => (
+              <div
+                key={template.name}
+                onClick={() => {
+                  setSelectedPreset(template.name)
+                  setTemplateToLoad(template)
+                }}
+                style={selectedPreset === template.name && activeTab === 'templates' ? selectedPresetItemStyle : presetItemStyle}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', color: '#e0e0e0', marginBottom: '2px' }}>{template.name}</div>
+                  <div style={{ fontSize: '11px', color: '#666' }}>{template.description}</div>
+                  <div style={{ fontSize: '11px', color: '#555', marginTop: '2px' }}>
+                    {template.agents.length} agent{template.agents.length !== 1 ? 's' : ''}: {template.agents.map(a => a.name).join(', ')}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+              <button
+                onClick={() => {
+                  if (templateToLoad) {
+                    setShowCwdPrompt(true)
+                  }
+                }}
+                disabled={!templateToLoad}
+                style={loadBtnStyle}
+              >
+                Use Template
               </button>
             </div>
           </div>
