@@ -35,7 +35,20 @@ function formatTimeLeft(ms: number | null): string {
   return `${mins}m left`
 }
 
+// R.A.C. is in-house only — password gate for the crew
+const RAC_ACCESS_HASH = '2036df8e66322febeadf5c84fb7ba662cc3375959a2a65113fcc061e7e25013e' // sha256 — change this to your crew's password hash
+
+async function hashPassword(pw: string): Promise<string> {
+  const data = new TextEncoder().encode(pw)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export function RacPanel(): React.ReactElement {
+  const [unlocked, setUnlocked] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState(false)
+
   const [serverUrl, setServerUrl] = useState('')
   const [editingUrl, setEditingUrl] = useState(false)
   const [urlInput, setUrlInput] = useState('')
@@ -43,6 +56,58 @@ export function RacPanel(): React.ReactElement {
   const [sessions, setSessions] = useState<RacSession[]>([])
   const [error, setError] = useState<string | null>(null)
   const [renting, setRenting] = useState<string | null>(null) // slot_id being rented
+
+  // Check if already unlocked this session
+  useEffect(() => {
+    if (sessionStorage.getItem('rac-unlocked') === 'true') {
+      setUnlocked(true)
+    }
+  }, [])
+
+  const handleUnlock = async () => {
+    const hash = await hashPassword(passwordInput)
+    if (hash === RAC_ACCESS_HASH) {
+      setUnlocked(true)
+      sessionStorage.setItem('rac-unlocked', 'true')
+      setPasswordError(false)
+    } else {
+      setPasswordError(true)
+    }
+  }
+
+  if (!unlocked) {
+    return (
+      <div style={{
+        height: '100%', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: '#1e1e1e', color: '#e0e0e0', gap: '12px', padding: '24px'
+      }}>
+        <div style={{ fontSize: '14px', fontWeight: 500 }}>R.A.C. — Crew Access Only</div>
+        <div style={{ color: '#666', fontSize: '12px', textAlign: 'center' }}>
+          This feature is in private testing. Enter the crew password to access.
+        </div>
+        <input
+          type="password"
+          value={passwordInput}
+          onChange={e => { setPasswordInput(e.target.value); setPasswordError(false) }}
+          onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+          placeholder="Password"
+          style={{
+            backgroundColor: '#2a2a2a', border: `1px solid ${passwordError ? '#f44336' : '#444'}`,
+            borderRadius: '4px', padding: '8px 12px', color: '#e0e0e0', fontSize: '13px',
+            width: '200px', textAlign: 'center'
+          }}
+        />
+        <button onClick={handleUnlock} style={{
+          padding: '6px 20px', backgroundColor: '#2d5a2d', border: '1px solid #4caf50',
+          borderRadius: '4px', color: '#4caf50', cursor: 'pointer', fontSize: '12px'
+        }}>Unlock</button>
+        {passwordError && (
+          <div style={{ color: '#f44336', fontSize: '11px' }}>Wrong password</div>
+        )}
+      </div>
+    )
+  }
 
   const refresh = useCallback(async () => {
     try {
