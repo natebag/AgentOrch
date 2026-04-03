@@ -146,6 +146,18 @@ export function App(): React.ReactElement {
     return unsub
   }, [])
 
+  // Auto-create windows for R.A.C. agents (they register externally, not via SPAWN_AGENT)
+  useEffect(() => {
+    for (const agent of agents) {
+      if (agent.name.startsWith('rac-')) {
+        const hasWindow = windows.some(w => w.id === agent.id)
+        if (!hasWindow) {
+          addWindow(agent.id, `${agent.name} (R.A.C.)`, '#4a9eff')
+        }
+      }
+    }
+  }, [agents, windows, addWindow])
+
   const handleProjectOpened = useCallback((p: RecentProject) => {
     setProject(p)
     setShowProjectPicker(false)

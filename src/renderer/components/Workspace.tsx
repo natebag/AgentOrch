@@ -7,6 +7,7 @@ import { InfoChannelPanel } from './InfoChannelPanel'
 import { BuddyRoomPanel } from './BuddyRoomPanel'
 import { FilePanel } from './FilePanel'
 import { RacPanel } from './RacPanel'
+import { RacAgentChat } from './RacAgentChat'
 import { ZoomControls } from './ZoomControls'
 import type { WindowState } from '../hooks/useWindowManager'
 import type { AgentState } from '../../shared/types'
@@ -261,6 +262,8 @@ export function Workspace({
             content = <FilePanel />
           } else if (panelType === 'rac') {
             content = <RacPanel />
+          } else if (agent && agent.name.startsWith('rac-')) {
+            content = <RacAgentChat agentName={agent.name} />
           } else {
             content = <TerminalWindow agentId={win.id} />
           }
