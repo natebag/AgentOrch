@@ -81,6 +81,9 @@ export const IPC = {
   PROJECT_LIST_RECENT: 'project:list-recent',
   PROJECT_OPEN_FOLDER: 'project:open-folder',
   PROJECT_CHANGED: 'project:changed',
+  FILE_LIST: 'file:list',
+  FILE_READ: 'file:read',
+  FILE_WRITE: 'file:write',
 } as const
 
 export interface BuddyMessage {

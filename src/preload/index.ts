@@ -57,5 +57,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: unknown, project: unknown) => callback(project)
     ipcRenderer.on(IPC.PROJECT_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.PROJECT_CHANGED, handler)
-  }
+  },
+  // File operations
+  listFiles: (dirPath?: string) => ipcRenderer.invoke(IPC.FILE_LIST, dirPath),
+  readFile: (filePath: string) => ipcRenderer.invoke(IPC.FILE_READ, filePath),
+  writeFile: (filePath: string, content: string) => ipcRenderer.invoke(IPC.FILE_WRITE, filePath, content),
 })

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
+import * as fs from 'fs'
 import { createDatabase } from './db/database'
 import { MessageStore } from './db/message-store'
 import { PinboardStore } from './db/pinboard-store'
@@ -592,6 +593,64 @@ function setupIPC(): void {
   ipcMain.handle(IPC.PROJECT_SWITCH, async (_event, projectPath: string) => {
     await openProject(projectPath)
     return projectManager.currentProject
+  })
+
+  // File operation IPC handlers
+  ipcMain.handle(IPC.FILE_LIST, async (_event, dirPath: string = '.') => {
+    if (!projectManager.currentProject) return { items: [] }
+    const projectPath = projectManager.currentProject.path
+    const resolved = path.resolve(projectPath, dirPath)
+    if (!resolved.startsWith(projectPath)) return { items: [] }
+
+    try {
+      const entries = fs.readdirSync(resolved, { withFileTypes: true })
+      return {
+        path: dirPath,
+        items: entries
+          .filter(e => !e.name.startsWith('.'))
+          .map(e => ({
+            name: e.name,
+            type: e.isDirectory() ? 'directory' : 'file',
+            path: path.join(dirPath, e.name).replace(/\\/g, '/')
+          }))
+          .sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
+            return a.name.localeCompare(b.name)
+          })
+      }
+    } catch {
+      return { path: dirPath, items: [] }
+    }
+  })
+
+  ipcMain.handle(IPC.FILE_READ, async (_event, filePath: string) => {
+    if (!projectManager.currentProject) return null
+    const projectPath = projectManager.currentProject.path
+    const resolved = path.resolve(projectPath, filePath)
+    if (!resolved.startsWith(projectPath)) return null
+
+    try {
+      const content = fs.readFileSync(resolved, 'utf-8')
+      return { path: filePath, content }
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle(IPC.FILE_WRITE, async (_event, filePath: string, content: string) => {
+    if (!projectManager.currentProject) return false
+    const projectPath = projectManager.currentProject.path
+    const resolved = path.resolve(projectPath, filePath)
+    if (!resolved.startsWith(projectPath)) return false
+
+    try {
+      const dir = path.dirname(resolved)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(resolved, content, 'utf-8')
+      return true
+    } catch {
+      return false
+    }
   })
 }
 
