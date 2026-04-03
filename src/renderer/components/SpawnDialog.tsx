@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import type { AgentConfig } from '../../shared/types'
+import { SkillBrowser } from './SkillBrowser'
 
 interface SpawnDialogProps {
   onSpawn: (config: Omit<AgentConfig, 'id'>) => void
@@ -107,6 +108,8 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
   const [customModel, setCustomModel] = useState('')
   const [providerUrl, setProviderUrl] = useState('https://api.openai.com/v1')
   const [customProviderUrl, setCustomProviderUrl] = useState('')
+  const [selectedSkills, setSelectedSkills] = useState<Array<{ id: string; name: string }>>([])
+  const [showSkillBrowser, setShowSkillBrowser] = useState(false)
 
   // Fetch cwd from main process (process.cwd is unavailable in renderer with contextIsolation)
   useEffect(() => {
@@ -138,7 +141,8 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
       promptRegex: promptRegex.trim() || undefined,
       model: (model || customModel.trim()) || undefined,
       providerUrl: cli === 'openclaude' ? (providerUrl || customProviderUrl.trim()) || undefined : undefined,
-      experimental: cli === 'grok' ? true : undefined
+      experimental: cli === 'grok' ? true : undefined,
+      skills: selectedSkills.length > 0 ? selectedSkills.map(s => s.id) : undefined,
     })
   }
 
@@ -273,6 +277,44 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
         )}
 
         <label style={labelStyle}>
+          Skills (optional)
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', minHeight: '28px' }}>
+            {selectedSkills.map(skill => (
+              <span key={skill.id} style={{
+                padding: '2px 8px',
+                backgroundColor: '#2d3a4d',
+                border: '1px solid #4a6fa5',
+                borderRadius: '12px',
+                fontSize: '11px',
+                color: '#8cb4e0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                {skill.name}
+                <span
+                  onClick={() => setSelectedSkills(prev => prev.filter(s => s.id !== skill.id))}
+                  style={{ cursor: 'pointer', color: '#666' }}
+                >x</span>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowSkillBrowser(true)}
+              style={{
+                padding: '2px 10px',
+                backgroundColor: '#2a2a2a',
+                border: '1px solid #444',
+                borderRadius: '12px',
+                fontSize: '11px',
+                color: '#888',
+                cursor: 'pointer'
+              }}
+            >+ Add Skills</button>
+          </div>
+        </label>
+
+        <label style={labelStyle}>
           CEO Notes
           <textarea
             value={ceoNotes}
@@ -337,6 +379,20 @@ export function SpawnDialog({ onSpawn, onCancel }: SpawnDialogProps): React.Reac
           <button type="button" onClick={onCancel} style={cancelBtnStyle}>Cancel</button>
           <button type="submit" disabled={!name.trim()} style={spawnBtnStyle}>Spawn</button>
         </div>
+
+        {showSkillBrowser && (
+          <SkillBrowser
+            selectedIds={selectedSkills.map(s => s.id)}
+            onToggleSkill={(skill) => {
+              setSelectedSkills(prev => {
+                const exists = prev.find(s => s.id === skill.id)
+                if (exists) return prev.filter(s => s.id !== skill.id)
+                return [...prev, { id: skill.id, name: skill.name }]
+              })
+            }}
+            onClose={() => setShowSkillBrowser(false)}
+          />
+        )}
       </form>
     </div>
   )
