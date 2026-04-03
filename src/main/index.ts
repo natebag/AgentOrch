@@ -6,20 +6,25 @@ import { PinboardStore } from './db/pinboard-store'
 import { InfoStore } from './db/info-store'
 import { createHubServer, type HubServer } from './hub/server'
 import { spawnAgentPty, writeToPty, resizePty, killPty, type ManagedPty } from './shell/pty-manager'
+import { buildCliLaunchCommands as buildCliLaunchCommandsForConfig } from './cli-launch'
 import { writeAgentMcpConfig, cleanupConfig } from './mcp/config-writer'
-import { savePreset, loadPreset, listPresets, deletePreset } from './presets/preset-manager'
+import { savePreset, loadPreset, listPresets, deletePreset, setPresetsDir } from './presets/preset-manager'
+import { ProjectManager } from './project/project-manager'
 import type { AgentConfig } from '../shared/types'
 import { IPC } from '../shared/types'
 
 let hub: HubServer
 let mainWindow: BrowserWindow
+let projectManager: ProjectManager
+let currentDb: import('better-sqlite3').Database | null = null
 const agents = new Map<string, ManagedPty>()
 const hasReceivedInitialPrompt = new Set<string>()
 const initialPrompts = new Map<string, string>()
 const manualKills = new Set<string>() // Track intentional kills to skip auto-reconnect
-const CLI_LOAD_TIME = 10000
+const pendingNudges = new Map<string, string[]>() // agentName → queued nudge strings
 const CODEX_SUBMIT_DELAY = 2000
 const RECONNECT_DELAY = 3000
+const PROMPT_INJECT_FALLBACK_MS = 30000 // Safety net if StatusDetector doesn't detect prompt
 
 function getMcpServerPath(): string {
   if (app.isPackaged) {
@@ -62,41 +67,7 @@ function buildCliLaunchCommands(
   config: AgentConfig, mcpConfigPath: string, mcpServerPath: string,
   hubPort: number, hubSecret: string
 ): string[] | null {
-  const cliBase = config.cli
-
-  // Plain terminal: don't launch any CLI, just leave the shell open
-  if (cliBase === 'terminal') return null
-
-  if (cliBase === 'claude') {
-    const parts = [`claude --mcp-config "${mcpConfigPath}"`]
-    if (config.model) parts[0] += ` --model ${config.model}`
-    if (config.autoMode) parts[0] += ' --dangerously-skip-permissions'
-    return parts
-  }
-
-  if (cliBase === 'codex') {
-    // Codex uses `codex mcp add <name> -- <command> <args>` to register MCP servers.
-    // Pass hub connection info as CLI args so codex's subprocess gets them
-    // (env vars may not propagate through codex's process spawning).
-    const cmds = [
-      `codex mcp remove agentorch 2>$null; codex mcp add agentorch -- node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
-    ]
-    let codexCmd = 'codex'
-    if (config.model) codexCmd += ` -m ${config.model}`
-    if (config.autoMode) codexCmd += ' --yolo'
-    cmds.push(codexCmd)
-    return cmds
-  }
-
-  if (cliBase === 'kimi') {
-    let cmd = `kimi --mcp-config-file "${mcpConfigPath}"`
-    if (config.model) cmd += ` --model ${config.model}`
-    if (config.autoMode) cmd += ' --yolo'
-    return [cmd]
-  }
-
-  // Custom CLIs: just run the command, no MCP
-  return [cliBase]
+  return buildCliLaunchCommandsForConfig(config, mcpConfigPath, mcpServerPath, hubPort, hubSecret)
 }
 
 // Build the initial prompt injected when the CLI first becomes ready.
@@ -145,11 +116,15 @@ function reconnectAgent(config: AgentConfig): void {
     AGENTORCH_AGENT_ID: config.id,
     AGENTORCH_AGENT_NAME: config.name
   }
+  if (config.cli === 'grok' && config.model) {
+    mcpEnv.GROK_MODEL = config.model
+  }
 
   hub.registry.register(config)
   const initialPrompt = buildInitialPrompt(config)
   initialPrompts.set(config.id, initialPrompt)
-  hasReceivedInitialPrompt.delete(config.id)
+  // Block prompt injection until CLI commands are sent
+  hasReceivedInitialPrompt.add(config.id)
 
   const managed = spawnAgentPty({
     config,
@@ -180,10 +155,20 @@ function reconnectAgent(config: AgentConfig): void {
     onStatusChange: (status) => {
       hub.registry.updateStatus(config.name, status)
       mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+
+      // Status-driven prompt injection: inject when CLI first reaches prompt
+      if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
+        hasReceivedInitialPrompt.add(config.id)
+        const prompt = initialPrompts.get(config.id)
+        if (prompt) injectPrompt(managed, prompt, 0)
+      }
+
+      // Flush queued nudges when agent becomes active
+      if (status === 'active') flushPendingNudges(config.name)
     },
     onClearDetected: () => {
-      const prompt = initialPrompts.get(config.id)
-      if (prompt) injectPrompt(managed, prompt, CLI_LOAD_TIME)
+      // Allow re-injection on next 'active' status
+      hasReceivedInitialPrompt.delete(config.id)
     }
   })
 
@@ -197,38 +182,63 @@ function reconnectAgent(config: AgentConfig): void {
       setTimeout(() => writeToPty(managed, cmd + '\r'), delay)
       delay += 3000
     }
+
+    // Enable status-driven injection after CLI commands are sent
+    setTimeout(() => hasReceivedInitialPrompt.delete(config.id), delay)
+
+    // Fallback: if StatusDetector doesn't detect prompt, inject after timeout
     setTimeout(() => {
       if (!hasReceivedInitialPrompt.has(config.id)) {
         hasReceivedInitialPrompt.add(config.id)
         injectPrompt(managed, initialPrompt, 0)
       }
-    }, delay + CLI_LOAD_TIME)
+    }, delay + PROMPT_INJECT_FALLBACK_MS)
   }
 
   console.log(`Agent "${config.name}" reconnected successfully`)
 }
 
-// When a message is queued for an agent, nudge them immediately via stdin.
-// MCP agents get a nudge to call get_messages(). Non-MCP agents get the full message.
+// Deliver a nudge to an agent's PTY, but only if they're at a prompt.
+// If the agent is mid-response, queue it for delivery when they next become 'active'.
+function deliverNudge(agentName: string, nudge: string): void {
+  const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
+  if (!managed) return
+
+  const agent = hub.registry.get(agentName)
+  if (!agent || agent.status !== 'active') {
+    // Queue for later delivery
+    if (!pendingNudges.has(agentName)) pendingNudges.set(agentName, [])
+    pendingNudges.get(agentName)!.push(nudge)
+    return
+  }
+
+  if (managed.config.cli === 'codex') {
+    writeToPty(managed, nudge)
+    setTimeout(() => writeToPty(managed, '\r'), CODEX_SUBMIT_DELAY)
+  } else {
+    writeToPty(managed, nudge + '\r')
+  }
+}
+
+// Flush any pending nudges when an agent becomes active.
+function flushPendingNudges(agentName: string): void {
+  const queued = pendingNudges.get(agentName)
+  if (!queued || queued.length === 0) return
+
+  // Deliver the most recent nudge only — stacking old nudges wastes context
+  const latest = queued[queued.length - 1]
+  pendingNudges.delete(agentName)
+  deliverNudge(agentName, latest)
+}
+
+// When a message is queued for an agent, nudge them to call get_messages().
 function setupMessageNudge(): void {
   hub.messages.onMessageQueued = (msg) => {
-    // Find the target agent's PTY by name
     const target = hub.registry.get(msg.to)
     if (!target) return
 
-    const managed = Array.from(agents.values()).find(a => a.config.name === msg.to)
-    if (!managed) return
-
     const nudge = `[AgentOrch] New message from "${msg.from}". Call get_messages() now to read it.`
-    if (managed.config.cli === 'codex') {
-      // Codex needs the text and Enter as separate writes with a delay.
-      // Its TUI must fully render the input text before Enter triggers submit.
-      writeToPty(managed, nudge)
-      setTimeout(() => writeToPty(managed, '\r'), 2000)
-    } else {
-      // Claude/Kimi: single write with \r works
-      writeToPty(managed, nudge + '\r')
-    }
+    deliverNudge(msg.to, nudge)
   }
 }
 
@@ -236,25 +246,97 @@ function setupMessageNudge(): void {
 function setupInfoNudge(): void {
   const existingCallback = hub.infoChannel.onEntryAdded
   hub.infoChannel.onEntryAdded = (entry) => {
-    // Preserve the existing persistence + renderer behavior before nudging.
     existingCallback?.(entry)
 
     const orchestrators = hub.registry.list().filter(agent => agent.role === 'orchestrator')
     for (const orchestrator of orchestrators) {
       if (orchestrator.name === entry.from) continue
 
-      const managed = Array.from(agents.values()).find(agent => agent.config.name === orchestrator.name)
-      if (!managed) continue
-
       const tagSuffix = entry.tags.length > 0 ? ` with tags [${entry.tags.join(', ')}]` : ''
       const nudge = `[AgentOrch] New info posted by "${entry.from}"${tagSuffix}. Call read_info() to read it.`
-      if (managed.config.cli === 'codex') {
-        writeToPty(managed, nudge)
-        setTimeout(() => writeToPty(managed, '\r'), CODEX_SUBMIT_DELAY)
-      } else {
-        writeToPty(managed, nudge + '\r')
-      }
+      deliverNudge(orchestrator.name, nudge)
     }
+  }
+}
+
+async function openProject(projectPath: string): Promise<void> {
+  // Close existing project if open
+  if (hub) await closeProject()
+
+  projectManager.initProject(projectPath)
+  setPresetsDir(projectManager.presetsDir)
+
+  // Initialize SQLite persistence at project path
+  const db = createDatabase(projectManager.dbPath)
+  currentDb = db
+  const messageStore = new MessageStore(db)
+  const pinboardStore = new PinboardStore(db)
+  const infoStore = new InfoStore(db)
+
+  hub = await createHubServer()
+  hub.setMessageStore(messageStore)
+  console.log(`Hub server running on port ${hub.port} for project: ${projectManager.currentProject!.name}`)
+
+  // Restore persisted state
+  hub.pinboard.loadTasks(pinboardStore.loadTasks())
+  hub.infoChannel.loadEntries(infoStore.loadEntries())
+
+  // Hook persistence callbacks
+  hub.messages.onMessageSaved = (msg) => messageStore.saveMessage(msg)
+  hub.pinboard.onTaskCreated = (task) => {
+    pinboardStore.saveTask(task)
+    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+  }
+  hub.pinboard.onTaskUpdated = (task) => {
+    pinboardStore.updateTask(task)
+    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+  }
+  hub.infoChannel.onEntryAdded = (entry) => {
+    infoStore.saveEntry(entry)
+    mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())
+  }
+
+  hub.setOutputAccessor((agentName, lines) => {
+    const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
+    if (!managed) return null
+    return managed.outputBuffer.getLines(lines)
+  })
+  setupMessageNudge()
+  setupInfoNudge()
+
+  // Update window title
+  if (mainWindow) {
+    mainWindow.setTitle(`AgentOrch — ${projectManager.currentProject!.name}`)
+    mainWindow.webContents.send(IPC.PROJECT_CHANGED, projectManager.currentProject)
+  }
+}
+
+async function closeProject(): Promise<void> {
+  // Kill all agents
+  for (const [id] of agents) {
+    manualKills.add(id)
+  }
+  for (const [, managed] of agents) {
+    killPty(managed)
+    if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+  }
+  agents.clear()
+  initialPrompts.clear()
+  hasReceivedInitialPrompt.clear()
+  pendingNudges.clear()
+
+  // Close hub
+  hub?.close()
+
+  // Close DB
+  if (currentDb) {
+    currentDb.close()
+    currentDb = null
+  }
+
+  // Notify renderer
+  if (mainWindow) {
+    mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, [])
   }
 }
 
@@ -286,10 +368,15 @@ function setupIPC(): void {
       AGENTORCH_AGENT_ID: config.id,
       AGENTORCH_AGENT_NAME: config.name
     }
+    if (config.cli === 'grok' && config.model) {
+      mcpEnv.GROK_MODEL = config.model
+    }
 
     hub.registry.register(config)
     const initialPrompt = buildInitialPrompt(config)
     initialPrompts.set(config.id, initialPrompt)
+    // Block prompt injection until CLI commands are sent
+    hasReceivedInitialPrompt.add(config.id)
 
     const managed = spawnAgentPty({
       config,
@@ -321,10 +408,20 @@ function setupIPC(): void {
       onStatusChange: (status) => {
         hub.registry.updateStatus(config.name, status)
         mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+
+        // Status-driven prompt injection: inject when CLI first reaches prompt
+        if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
+          hasReceivedInitialPrompt.add(config.id)
+          const prompt = initialPrompts.get(config.id)
+          if (prompt) injectPrompt(managed, prompt, 0)
+        }
+
+        // Flush queued nudges when agent becomes active
+        if (status === 'active') flushPendingNudges(config.name)
       },
       onClearDetected: () => {
-        const prompt = initialPrompts.get(config.id)
-        if (prompt) injectPrompt(managed, prompt, CLI_LOAD_TIME)
+        // Allow re-injection on next 'active' status
+        hasReceivedInitialPrompt.delete(config.id)
       }
     })
 
@@ -343,14 +440,16 @@ function setupIPC(): void {
         delay += 3000 // Give each command time to complete
       }
 
-      // Inject initial prompt AFTER the CLI has had time to fully load.
-      // This goes into the agent CLI's input, not PowerShell.
+      // Enable status-driven injection after CLI commands are sent
+      setTimeout(() => hasReceivedInitialPrompt.delete(config.id), delay)
+
+      // Fallback: if StatusDetector doesn't detect prompt, inject after timeout
       setTimeout(() => {
         if (!hasReceivedInitialPrompt.has(config.id)) {
           hasReceivedInitialPrompt.add(config.id)
           injectPrompt(managed, initialPrompt, 0)
         }
-      }, delay + CLI_LOAD_TIME)
+      }, delay + PROMPT_INJECT_FALLBACK_MS)
     }
 
     // For non-MCP agents: poll and inject messages into stdin
@@ -370,6 +469,7 @@ function setupIPC(): void {
       killPty(managed)
       hub.registry.remove(managed.config.name)
       hub.messages.clearAgent(managed.config.name)
+      pendingNudges.delete(managed.config.name)
       if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
       initialPrompts.delete(agentId)
       hasReceivedInitialPrompt.delete(agentId)
@@ -421,66 +521,50 @@ function setupIPC(): void {
   ipcMain.handle(IPC.INFO_GET_ENTRIES, () => {
     return hub.infoChannel.readInfo()
   })
+
+  // Project management IPC
+  ipcMain.handle(IPC.PROJECT_GET_CURRENT, () => {
+    return projectManager.currentProject
+  })
+
+  ipcMain.handle(IPC.PROJECT_LIST_RECENT, () => {
+    return projectManager.listRecent()
+  })
+
+  ipcMain.handle(IPC.PROJECT_OPEN_FOLDER, async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  ipcMain.handle(IPC.PROJECT_SWITCH, async (_event, projectPath: string) => {
+    await openProject(projectPath)
+    return projectManager.currentProject
+  })
 }
 
 async function main(): Promise<void> {
   await app.whenReady()
 
-  // Initialize SQLite persistence
-  const dbPath = path.join(app.getPath('userData'), 'agentorch.db')
-  const db = createDatabase(dbPath)
-  const messageStore = new MessageStore(db)
-  const pinboardStore = new PinboardStore(db)
-  const infoStore = new InfoStore(db)
-
-  hub = await createHubServer()
-  console.log(`Hub server running on port ${hub.port}`)
-
-  // Restore persisted state into in-memory stores
-  hub.pinboard.loadTasks(pinboardStore.loadTasks())
-  hub.infoChannel.loadEntries(infoStore.loadEntries())
-
-  // Hook persistence callbacks (write-behind to SQLite) + push to renderer
-  hub.messages.onMessageSaved = (msg) => messageStore.saveMessage(msg)
-  hub.pinboard.onTaskCreated = (task) => {
-    pinboardStore.saveTask(task)
-    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
-  }
-  hub.pinboard.onTaskUpdated = (task) => {
-    pinboardStore.updateTask(task)
-    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
-  }
-  hub.infoChannel.onEntryAdded = (entry) => {
-    infoStore.saveEntry(entry)
-    mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())
-  }
-
-  hub.setOutputAccessor((agentName, lines) => {
-    const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
-    if (!managed) return null
-    return managed.outputBuffer.getLines(lines)
-  })
-  setupMessageNudge()
-  setupInfoNudge()
+  projectManager = new ProjectManager(app.getPath('userData'))
 
   setupIPC()
   mainWindow = createWindow()
+
+  // Auto-open last project, or let renderer show project picker
+  const lastProject = projectManager.getLastProject()
+  if (lastProject) {
+    await openProject(lastProject.path)
+  } else {
+    // No project history — renderer will show project picker
+    mainWindow.webContents.send(IPC.PROJECT_CHANGED, null)
+  }
 }
 
 main()
 
-app.on('window-all-closed', () => {
-  // Mark all as manual kills to prevent auto-reconnect during shutdown
-  for (const [id] of agents) {
-    manualKills.add(id)
-  }
-  for (const [, managed] of agents) {
-    killPty(managed)
-    if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
-  }
-  agents.clear()
-  initialPrompts.clear()
-  hasReceivedInitialPrompt.clear()
-  hub?.close()
+app.on('window-all-closed', async () => {
+  await closeProject()
   app.quit()
 })
