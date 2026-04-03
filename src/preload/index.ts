@@ -68,4 +68,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createSkill: (input: unknown) => ipcRenderer.invoke(IPC.SKILL_CREATE, input),
   updateSkill: (id: string, updates: unknown) => ipcRenderer.invoke(IPC.SKILL_UPDATE, id, updates),
   deleteSkill: (id: string) => ipcRenderer.invoke(IPC.SKILL_DELETE, id),
+  // R.A.C.
+  racGetServer: () => ipcRenderer.invoke(IPC.RAC_GET_SERVER),
+  racSetServer: (url: string) => ipcRenderer.invoke(IPC.RAC_SET_SERVER, url),
+  racGetAvailable: () => ipcRenderer.invoke(IPC.RAC_GET_AVAILABLE),
+  racRent: (slotId: string, renterName: string) => ipcRenderer.invoke(IPC.RAC_RENT, slotId, renterName),
+  racRelease: (sessionId: string) => ipcRenderer.invoke(IPC.RAC_RELEASE, sessionId),
+  racGetSessions: () => ipcRenderer.invoke(IPC.RAC_GET_SESSIONS),
 })

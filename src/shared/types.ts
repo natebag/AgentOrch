@@ -92,6 +92,12 @@ export const IPC = {
   SKILL_DELETE: 'skill:delete',
   SKILL_SEARCH_COMMUNITY: 'skill:search-community',
   SKILL_INSTALL_COMMUNITY: 'skill:install-community',
+  RAC_GET_AVAILABLE: 'rac:get-available',
+  RAC_RENT: 'rac:rent',
+  RAC_RELEASE: 'rac:release',
+  RAC_GET_SESSIONS: 'rac:get-sessions',
+  RAC_SET_SERVER: 'rac:set-server',
+  RAC_GET_SERVER: 'rac:get-server',
 } as const
 
 export interface BuddyMessage {
@@ -110,6 +116,25 @@ export interface Skill {
   source: 'built-in' | 'user' | 'community'
   prompt: string
   tags: string[]
+}
+
+export interface RacSlot {
+  slot_id: string
+  parker_name: string
+  tier: string
+  note: string
+  expires_at: number | null
+  time_left_ms: number | null
+  created_at: number
+}
+
+export interface RacSession {
+  session_id: string
+  slot_id: string
+  parker: string
+  renter: string
+  agentorch_agent: string
+  status: string
 }
 
 export interface InfoEntry {

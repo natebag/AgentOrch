@@ -12,6 +12,7 @@ import { writeAgentMcpConfig, cleanupConfig } from './mcp/config-writer'
 import { savePreset, loadPreset, listPresets, deletePreset, setPresetsDir } from './presets/preset-manager'
 import { ProjectManager } from './project/project-manager'
 import { SkillManager } from './skills/skill-manager'
+import { RacClient } from './rac/rac-client'
 import type { AgentConfig } from '../shared/types'
 import { IPC } from '../shared/types'
 
@@ -19,6 +20,7 @@ let hub: HubServer
 let mainWindow: BrowserWindow
 let projectManager: ProjectManager
 let skillManager: SkillManager
+let racClient: RacClient
 let currentDb: import('better-sqlite3').Database | null = null
 const agents = new Map<string, ManagedPty>()
 const hasReceivedInitialPrompt = new Set<string>()
@@ -719,6 +721,51 @@ function setupIPC(): void {
   ipcMain.handle(IPC.SKILL_DELETE, (_event, id: string) => {
     return skillManager.deleteSkill(id)
   })
+
+  // R.A.C. IPC
+  ipcMain.handle(IPC.RAC_GET_SERVER, () => racClient.getServer())
+
+  ipcMain.handle(IPC.RAC_SET_SERVER, (_event, url: string) => {
+    racClient.setServer(url)
+    return { status: 'ok' }
+  })
+
+  ipcMain.handle(IPC.RAC_GET_AVAILABLE, async () => {
+    try {
+      return await racClient.getAvailable()
+    } catch (err: any) {
+      return { available: [], count: 0, error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.RAC_RENT, async (_event, slotId: string, renterName: string) => {
+    if (!hub) throw new Error('No project open')
+    try {
+      const session = await racClient.rent(slotId, renterName, hub.port, hub.secret)
+      // Notify renderer that agents changed (bridge will register on the hub)
+      setTimeout(() => {
+        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      }, 2000) // Give bridge time to register
+      return session
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.RAC_RELEASE, async (_event, sessionId: string) => {
+    try {
+      await racClient.release(sessionId)
+      // Agent will be unregistered from hub by R.A.C. bridge
+      setTimeout(() => {
+        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      }, 1000)
+      return { status: 'ok' }
+    } catch (err: any) {
+      return { error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.RAC_GET_SESSIONS, () => racClient.getActiveSessions())
 }
 
 async function main(): Promise<void> {
@@ -736,6 +783,8 @@ async function main(): Promise<void> {
     : path.join(__dirname, '../data/skills')
   const userSkillsDir = path.join(app.getPath('userData'), 'skills')
   skillManager = new SkillManager(builtInSkillsDir, userSkillsDir)
+
+  racClient = new RacClient()
 
   setupIPC()
   mainWindow = createWindow()
