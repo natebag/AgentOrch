@@ -86,24 +86,24 @@ describe('MessageRouter', () => {
     }
   })
 
-  it('rejects the 11th message within 60 seconds', () => {
+  it('rejects the 31st message within 60 seconds', () => {
     vi.useFakeTimers()
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       router.send('orchestrator', 'worker-1', `msg-${i}`)
     }
 
-    const result = router.send('orchestrator', 'worker-1', 'msg-10')
+    const result = router.send('orchestrator', 'worker-1', 'msg-30')
     expect(result).toEqual({
       status: 'error',
-      detail: 'Rate limit exceeded. Max 10 messages per minute.'
+      detail: 'Rate limit exceeded. Max 30 messages per minute.'
     })
   })
 
   it('resets the sender rate limit after 60 seconds', () => {
     vi.useFakeTimers()
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       router.send('orchestrator', 'worker-1', `msg-${i}`)
     }
 
@@ -116,7 +116,7 @@ describe('MessageRouter', () => {
   it('clearAgent also clears rate limit timestamps', () => {
     vi.useFakeTimers()
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       router.send('orchestrator', 'worker-1', `msg-${i}`)
     }
 
@@ -150,15 +150,15 @@ describe('MessageRouter', () => {
     vi.useFakeTimers()
     registry.register(makeConfig('worker-2'))
 
-    // 9 direct sends + 1 broadcast = 10 actions, all should succeed
-    for (let i = 0; i < 9; i++) {
+    // 29 direct sends + 1 broadcast = 30 actions, all should succeed
+    for (let i = 0; i < 29; i++) {
       router.send('orchestrator', 'worker-1', `msg-${i}`)
     }
     const result = router.broadcast('orchestrator', 'broadcast msg')
     expect(result.delivered).toBe(2)
     expect(result.error).toBeUndefined()
 
-    // 11th action should be rate-limited
+    // 31st action should be rate-limited
     const blocked = router.send('orchestrator', 'worker-1', 'blocked')
     expect(blocked.status).toBe('error')
   })
@@ -166,7 +166,7 @@ describe('MessageRouter', () => {
   it('broadcast returns error when rate-limited', () => {
     vi.useFakeTimers()
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       router.send('orchestrator', 'worker-1', `msg-${i}`)
     }
 
