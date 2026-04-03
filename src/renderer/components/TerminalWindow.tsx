@@ -60,7 +60,10 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
     })
 
     const disposable = term.onData((data) => {
-      window.electronAPI.writeToPty(agentId, data)
+      // Filter out focus in/out escape sequences (ESC[I, ESC[O)
+      // These get sent when clicking the terminal and some TUIs (Codex) can't handle them
+      const filtered = data.replace(/\x1b\[(?:I|O)/g, '')
+      if (filtered) window.electronAPI.writeToPty(agentId, filtered)
     })
 
     const observer = new ResizeObserver(() => {
