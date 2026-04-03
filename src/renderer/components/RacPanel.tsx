@@ -57,12 +57,44 @@ export function RacPanel(): React.ReactElement {
   const [error, setError] = useState<string | null>(null)
   const [renting, setRenting] = useState<string | null>(null) // slot_id being rented
 
+  // ALL hooks must be above any early return (React rules of hooks)
+  const refresh = useCallback(async () => {
+    try {
+      const [avail, sess] = await Promise.all([
+        electronAPI.racGetAvailable(),
+        electronAPI.racGetSessions()
+      ])
+      if (avail.error) {
+        setError(avail.error)
+        setAvailable([])
+      } else {
+        setError(null)
+        setAvailable(avail.available)
+      }
+      setSessions(sess)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }, [])
+
   // Check if already unlocked this session
   useEffect(() => {
     if (sessionStorage.getItem('rac-unlocked') === 'true') {
       setUnlocked(true)
     }
   }, [])
+
+  // Only poll when unlocked
+  useEffect(() => {
+    if (!unlocked) return
+    electronAPI.racGetServer().then(url => {
+      setServerUrl(url)
+      setUrlInput(url)
+    })
+    refresh()
+    const interval = setInterval(refresh, 5000)
+    return () => clearInterval(interval)
+  }, [unlocked, refresh])
 
   const handleUnlock = async () => {
     const hash = await hashPassword(passwordInput)
@@ -108,35 +140,6 @@ export function RacPanel(): React.ReactElement {
       </div>
     )
   }
-
-  const refresh = useCallback(async () => {
-    try {
-      const [avail, sess] = await Promise.all([
-        electronAPI.racGetAvailable(),
-        electronAPI.racGetSessions()
-      ])
-      if (avail.error) {
-        setError(avail.error)
-        setAvailable([])
-      } else {
-        setError(null)
-        setAvailable(avail.available)
-      }
-      setSessions(sess)
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }, [])
-
-  useEffect(() => {
-    electronAPI.racGetServer().then(url => {
-      setServerUrl(url)
-      setUrlInput(url)
-    })
-    refresh()
-    const interval = setInterval(refresh, 5000)
-    return () => clearInterval(interval)
-  }, [refresh])
 
   const handleRent = async (slotId: string) => {
     setRenting(slotId)
