@@ -12,6 +12,8 @@ interface TopBarProps {
   onTogglePinboard: () => void
   infoOpen: boolean
   onToggleInfo: () => void
+  buddyOpen: boolean
+  onToggleBuddy: () => void
   onPresetsClick: () => void
 }
 
@@ -27,7 +29,7 @@ const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap'
 })
 
-export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, onPresetsClick }: TopBarProps): React.ReactElement {
+export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, buddyOpen, onToggleBuddy, onPresetsClick }: TopBarProps): React.ReactElement {
   return (
     <div style={{
       height: '44px',
@@ -96,6 +98,7 @@ export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onA
       <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' }}>
         <button onClick={onTogglePinboard} style={toggleBtnStyle(pinboardOpen)}>Pinboard</button>
         <button onClick={onToggleInfo} style={toggleBtnStyle(infoOpen)}>Info</button>
+        <button onClick={onToggleBuddy} style={toggleBtnStyle(buddyOpen)}>Buddy</button>
         <div style={{ width: '1px', height: '24px', backgroundColor: '#333' }} />
         <button onClick={onPresetsClick} style={toggleBtnStyle(false)}>Presets</button>
       </div>

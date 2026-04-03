@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.INFO_ENTRY_ADDED, handler)
     return () => ipcRenderer.removeListener(IPC.INFO_ENTRY_ADDED, handler)
   },
+  getBuddyMessages: () => ipcRenderer.invoke(IPC.BUDDY_GET_MESSAGES),
+  onBuddyUpdate: (callback: (messages: unknown[]) => void) => {
+    const handler = (_event: unknown, messages: unknown[]) => callback(messages)
+    ipcRenderer.on(IPC.BUDDY_MESSAGE_ADDED, handler)
+    return () => ipcRenderer.removeListener(IPC.BUDDY_MESSAGE_ADDED, handler)
+  },
   // Project management
   getProject: () => ipcRenderer.invoke(IPC.PROJECT_GET_CURRENT),
   switchProject: (path: string) => ipcRenderer.invoke(IPC.PROJECT_SWITCH, path),

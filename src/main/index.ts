@@ -330,6 +330,10 @@ async function openProject(projectPath: string): Promise<void> {
     mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())
   }
 
+  hub.buddyRoom.onMessageAdded = (_msg) => {
+    mainWindow?.webContents.send(IPC.BUDDY_MESSAGE_ADDED, hub.buddyRoom.getMessages())
+  }
+
   hub.setOutputAccessor((agentName, lines) => {
     const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
     if (!managed) return null
@@ -561,6 +565,11 @@ function setupIPC(): void {
   // Info Channel IPC handlers
   ipcMain.handle(IPC.INFO_GET_ENTRIES, () => {
     return hub.infoChannel.readInfo()
+  })
+
+  // Buddy Room IPC handlers
+  ipcMain.handle(IPC.BUDDY_GET_MESSAGES, () => {
+    return hub?.buddyRoom.getMessages() ?? []
   })
 
   // Project management IPC

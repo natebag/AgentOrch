@@ -16,6 +16,7 @@ declare const electronAPI: {
 
 const PINBOARD_ID = '__pinboard__'
 const INFO_ID = '__info__'
+const BUDDY_ID = '__buddy__'
 
 export function App(): React.ReactElement {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
@@ -32,6 +33,7 @@ export function App(): React.ReactElement {
 
   const pinboardOpen = windows.some(w => w.id === PINBOARD_ID)
   const infoOpen = windows.some(w => w.id === INFO_ID)
+  const buddyOpen = windows.some(w => w.id === BUDDY_ID)
 
   const handleSpawn = useCallback(async (config: Omit<AgentConfig, 'id'>) => {
     setShowSpawnDialog(false)
@@ -41,7 +43,7 @@ export function App(): React.ReactElement {
 
   const handleClose = useCallback(async (windowId: string) => {
     // Panel windows just get removed, no agent to kill
-    if (windowId === PINBOARD_ID || windowId === INFO_ID) {
+    if (windowId === PINBOARD_ID || windowId === INFO_ID || windowId === BUDDY_ID) {
       removeWindow(windowId)
       return
     }
@@ -68,6 +70,14 @@ export function App(): React.ReactElement {
       addWindow(INFO_ID, 'Info Channel')
     }
   }, [infoOpen, addWindow, removeWindow])
+
+  const toggleBuddy = useCallback(() => {
+    if (buddyOpen) {
+      removeWindow(BUDDY_ID)
+    } else {
+      addWindow(BUDDY_ID, 'Buddy Room')
+    }
+  }, [buddyOpen, addWindow, removeWindow])
 
   // Keyboard shortcuts: Ctrl+1..9 to focus windows, Ctrl+Tab to cycle
   useEffect(() => {
@@ -137,6 +147,8 @@ export function App(): React.ReactElement {
             onTogglePinboard={togglePinboard}
             infoOpen={infoOpen}
             onToggleInfo={toggleInfo}
+            buddyOpen={buddyOpen}
+            onToggleBuddy={toggleBuddy}
             onPresetsClick={() => setShowPresetDialog(true)}
           />
           <Workspace
