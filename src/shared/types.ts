@@ -14,6 +14,7 @@ export interface AgentConfig {
   model?: string  // e.g. 'sonnet', 'opus', 'haiku', 'o4-mini', 'gpt-4.1'
   providerUrl?: string  // OpenAI-compatible base URL (for OpenClaude)
   experimental?: boolean
+  skills?: string[]  // skill IDs attached to this agent
 }
 
 export interface AgentState extends AgentConfig {
@@ -84,6 +85,13 @@ export const IPC = {
   FILE_LIST: 'file:list',
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
+  SKILL_LIST: 'skill:list',
+  SKILL_GET: 'skill:get',
+  SKILL_CREATE: 'skill:create',
+  SKILL_UPDATE: 'skill:update',
+  SKILL_DELETE: 'skill:delete',
+  SKILL_SEARCH_COMMUNITY: 'skill:search-community',
+  SKILL_INSTALL_COMMUNITY: 'skill:install-community',
 } as const
 
 export interface BuddyMessage {
@@ -92,6 +100,16 @@ export interface BuddyMessage {
   buddyName: string
   message: string
   timestamp: string
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  category: string
+  source: 'built-in' | 'user' | 'community'
+  prompt: string
+  tags: string[]
 }
 
 export interface InfoEntry {
