@@ -1,11 +1,20 @@
 // Strip ANSI escape codes from terminal output
 function stripAnsi(str: string): string {
-  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
+  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/\x1b\[[\d;]*m/g, '')
 }
 
-// Strip box-drawing characters and clean up speech bubble text
-function stripBoxChars(str: string): string {
-  return str.replace(/[│╭╮╰╯─┤├┐┘┌└┬┴┼╔╗╚╝║═]/g, '').trim()
+// Strip box-drawing characters
+function stripBox(str: string): string {
+  return str.replace(/[│╭╮╰╯─┤├┐┘┌└┬┴┼╔╗╚╝║═★░▓█]/g, ' ')
+}
+
+// Clean up extracted speech text
+function cleanSpeech(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')  // collapse whitespace
+    .replace(/^\s+|\s+$/g, '')  // trim
 }
 
 export interface BuddyDetection {
@@ -13,93 +22,101 @@ export interface BuddyDetection {
   message: string
 }
 
-// Jostle's speech bubble format in terminal output:
-// │  ╭────────────────────────────────╮  │
-// │  │ *spins excitedly* Waiting for  │  │
-// │  │ bugs like a turtle waits for   │  │
-// │  │ lettuce. Zzzzzzz.              │  │
-// │  ╰────────────────────────────────╯  │
-//
-// Detection strategy:
-// 1. Detect "Jostle" name line → mark that a buddy card is active
-// 2. Detect speech bubble open (╭──) → start capturing
-// 3. Capture lines inside the bubble (between │ markers)
-// 4. Detect speech bubble close (╰──) → emit the captured speech
+// Known buddy names to search for
+const BUDDY_NAMES = ['Jostle', 'Turtle', 'Buddy', 'Companion']
 
-type CaptureState = 'idle' | 'saw_name' | 'capturing'
-
+/**
+ * BuddyDetector works on raw PTY data chunks (not lines).
+ *
+ * It accumulates a rolling buffer and searches for buddy speech patterns.
+ * The buddy card renders with ANSI cursor positioning, so line-by-line
+ * parsing is unreliable. Instead we search the stripped buffer for:
+ *
+ * 1. "last said" marker followed by speech in a box-drawing bubble
+ * 2. Inline speech pattern: *action text* followed by speech
+ * 3. Any text near a known buddy name that looks like speech
+ */
 export class BuddyDetector {
-  private state: CaptureState = 'idle'
-  private capturedLines: string[] = []
-  private currentBuddyName = ''
+  private buffer = ''
   private lastDetectionTime = 0
-  private cooldownMs = 5000 // Avoid duplicate detections
-  private nameTimeout: ReturnType<typeof setTimeout> | null = null
+  private cooldownMs = 8000 // Avoid duplicate detections
+  private lastMessage = '' // Dedup identical messages
 
-  detectLine(rawLine: string): BuddyDetection | null {
-    const stripped = stripAnsi(rawLine)
-    const clean = stripBoxChars(stripped)
+  /**
+   * Feed a raw PTY data chunk. Returns a detection if buddy speech is found.
+   */
+  detect(rawData: string): BuddyDetection | null {
+    this.buffer += rawData
 
-    // Detect buddy name (e.g., "Jostle", "Buddy", companion names)
-    if (this.state === 'idle') {
-      const nameMatch = clean.match(/^\s*(Jostle|Turtle|Buddy|Companion)\s*$/i)
-      if (nameMatch) {
-        this.state = 'saw_name'
-        this.currentBuddyName = nameMatch[1]
-        // Reset if we don't see a speech bubble within 20 lines
-        if (this.nameTimeout) clearTimeout(this.nameTimeout)
-        this.nameTimeout = setTimeout(() => {
-          if (this.state === 'saw_name') {
-            this.state = 'idle'
-            this.currentBuddyName = ''
-          }
-        }, 5000)
-        return null
+    // Keep buffer from growing unbounded (keep last 5KB)
+    if (this.buffer.length > 5000) {
+      this.buffer = this.buffer.slice(-3000)
+    }
+
+    // Strip ANSI codes and box-drawing for pattern matching
+    const stripped = stripAnsi(this.buffer)
+    const clean = stripBox(stripped)
+
+    // Strategy 1: Find "last said" pattern from /buddy card
+    // The speech is between the inner bubble markers after "last said"
+    const lastSaidIdx = clean.lastIndexOf('last said')
+    if (lastSaidIdx !== -1) {
+      const afterLastSaid = clean.slice(lastSaidIdx)
+
+      // Look for *action* speech pattern after "last said"
+      const speechMatch = afterLastSaid.match(/\*([^*]+)\*\s*(.{5,}?)(?:\s{3,}|$)/)
+      if (speechMatch) {
+        const action = speechMatch[1].trim()
+        const speech = speechMatch[2].trim()
+        const fullMessage = `*${action}* ${speech}`
+        return this.emitIfNew(fullMessage)
+      }
+
+      // Fallback: just grab substantial text after "last said"
+      const textMatch = afterLastSaid.match(/last said\s+(.{10,}?)(?:\s{4,}|$)/)
+      if (textMatch) {
+        const speech = cleanSpeech(textMatch[1])
+        if (speech.length > 10) {
+          return this.emitIfNew(speech)
+        }
       }
     }
 
-    // After seeing the name, look for "last said" or speech bubble open
-    if (this.state === 'saw_name') {
-      // Detect speech bubble opening: line contains ╭ followed by ─
-      if (stripped.includes('\u256D') && stripped.includes('\u2500')) {
-        this.state = 'capturing'
-        this.capturedLines = []
-        return null
+    // Strategy 2: Inline speech — *action* pattern near a buddy name
+    for (const name of BUDDY_NAMES) {
+      const nameIdx = clean.lastIndexOf(name)
+      if (nameIdx === -1) continue
+
+      // Look for *action* speech within 500 chars after the name
+      const vicinity = clean.slice(nameIdx, nameIdx + 500)
+      const inlineMatch = vicinity.match(/\*([^*]+)\*\s*(.{5,}?)(?:\s{3,}|$)/)
+      if (inlineMatch) {
+        const action = inlineMatch[1].trim()
+        const speech = inlineMatch[2].trim()
+        const fullMessage = `*${action}* ${speech}`
+        return this.emitIfNew(fullMessage, name)
       }
-      // Also detect "last said" as a marker
-      if (clean.toLowerCase().includes('last said')) {
-        // Keep waiting for the bubble
-        return null
-      }
-    }
-
-    // Capturing speech bubble content
-    if (this.state === 'capturing') {
-      // Detect speech bubble closing: line contains ╰ followed by ─
-      if (stripped.includes('\u2570') && stripped.includes('\u2500')) {
-        this.state = 'idle'
-        if (this.nameTimeout) { clearTimeout(this.nameTimeout); this.nameTimeout = null }
-
-        const speech = this.capturedLines
-          .map(l => stripBoxChars(l))
-          .filter(l => l.length > 0)
-          .join(' ')
-          .trim()
-
-        if (!speech) return null
-
-        const now = Date.now()
-        if (now - this.lastDetectionTime < this.cooldownMs) return null
-        this.lastDetectionTime = now
-
-        return { buddyName: this.currentBuddyName, message: speech }
-      }
-
-      // Accumulate content lines (inside the bubble)
-      this.capturedLines.push(clean)
-      return null
     }
 
     return null
+  }
+
+  private emitIfNew(message: string, buddyName = 'Jostle'): BuddyDetection | null {
+    const now = Date.now()
+
+    // Cooldown check
+    if (now - this.lastDetectionTime < this.cooldownMs) return null
+
+    // Dedup: don't re-emit the exact same message
+    if (message === this.lastMessage) return null
+
+    // Sanity: ignore very short or garbage messages
+    if (message.length < 8) return null
+
+    this.lastDetectionTime = now
+    this.lastMessage = message
+    this.buffer = '' // Clear buffer after successful detection
+
+    return { buddyName, message }
   }
 }

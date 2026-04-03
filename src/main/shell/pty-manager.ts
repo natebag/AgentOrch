@@ -76,13 +76,10 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
     outputBuffer.pushRaw(data)
     opts.onData(data)
 
-    // Scan for buddy/companion speech
-    const strippedLines = data.split('\n')
-    for (const line of strippedLines) {
-      const detection = buddyDetector.detectLine(line)
-      if (detection) {
-        opts.onBuddyDetected?.(detection)
-      }
+    // Scan for buddy/companion speech in the raw chunk
+    const detection = buddyDetector.detect(data)
+    if (detection) {
+      opts.onBuddyDetected?.(detection)
     }
   })
 
