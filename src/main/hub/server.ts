@@ -6,6 +6,8 @@ import { Pinboard } from './pinboard'
 import { InfoChannel } from './info-channel'
 import { generateSecret, validateSecret } from './auth'
 import { createRoutes, type OutputAccessor } from './routes'
+import { BuddyRoom } from './buddy-room'
+import type { MessageStore } from '../db/message-store'
 
 export interface HubServer {
   port: number
@@ -14,7 +16,9 @@ export interface HubServer {
   messages: MessageRouter
   pinboard: Pinboard
   infoChannel: InfoChannel
+  buddyRoom: BuddyRoom
   setOutputAccessor: (fn: OutputAccessor) => void
+  setMessageStore: (store: MessageStore) => void
   close: () => void
 }
 
@@ -26,6 +30,7 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     const messages = new MessageRouter(registry)
     const pinboard = new Pinboard()
     const infoChannel = new InfoChannel()
+    const buddyRoom = new BuddyRoom()
 
     app.use(express.json())
 
@@ -39,7 +44,8 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     })
 
     const outputRef: { accessor: OutputAccessor | null } = { accessor: null }
-    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel))
+    const messageStoreRef: { store: MessageStore | null } = { store: null }
+    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel, messageStoreRef))
 
     const server: Server = app.listen(preferredPort, '127.0.0.1', () => {
       const addr = server.address()
@@ -54,7 +60,9 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
         messages,
         pinboard,
         infoChannel,
+        buddyRoom,
         setOutputAccessor: (fn) => { outputRef.accessor = fn },
+        setMessageStore: (store) => { messageStoreRef.store = store },
         close: () => server.close()
       })
     })

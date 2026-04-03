@@ -200,6 +200,9 @@ function reconnectAgent(config: AgentConfig): void {
     onClearDetected: () => {
       // Allow re-injection on next 'active' status
       hasReceivedInitialPrompt.delete(config.id)
+    },
+    onBuddyDetected: (detection) => {
+      hub.buddyRoom.addMessage(config.name, detection.buddyName, detection.message)
     }
   })
 
@@ -457,6 +460,9 @@ function setupIPC(): void {
       onClearDetected: () => {
         // Allow re-injection on next 'active' status
         hasReceivedInitialPrompt.delete(config.id)
+      },
+      onBuddyDetected: (detection) => {
+        hub.buddyRoom.addMessage(config.name, detection.buddyName, detection.message)
       }
     })
 

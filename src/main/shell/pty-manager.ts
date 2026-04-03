@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
 import { StatusDetector } from './status-detector'
 import { OutputBuffer } from './output-buffer'
+import { BuddyDetector, type BuddyDetection } from './buddy-detector'
 import type { AgentConfig, AgentStatus } from '../../shared/types'
 
 export interface ManagedPty {
@@ -10,6 +11,7 @@ export interface ManagedPty {
   statusDetector: StatusDetector
   outputBuffer: OutputBuffer
   mcpConfigPath: string | null
+  buddyDetector: BuddyDetector
 }
 
 interface SpawnOptions {
@@ -20,6 +22,7 @@ interface SpawnOptions {
   onExit: (exitCode: number | undefined) => void
   onStatusChange: (status: AgentStatus) => void
   onClearDetected?: () => void
+  onBuddyDetected?: (detection: BuddyDetection) => void
 }
 
 function resolveShell(config: AgentConfig): string {
@@ -47,6 +50,7 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
     onClearDetected: opts.onClearDetected
   })
 
+  const buddyDetector = new BuddyDetector()
   const outputBuffer = new OutputBuffer(1000)
   const shell = resolveShell(opts.config)
   const shellArgs: string[] = []
@@ -71,6 +75,15 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
     statusDetector.onData(data)
     outputBuffer.pushRaw(data)
     opts.onData(data)
+
+    // Scan for buddy/companion speech
+    const strippedLines = data.split('\n')
+    for (const line of strippedLines) {
+      const detection = buddyDetector.detectLine(line)
+      if (detection) {
+        opts.onBuddyDetected?.(detection)
+      }
+    }
   })
 
   ptyProcess.onExit(({ exitCode }) => {
@@ -83,7 +96,8 @@ export function spawnAgentPty(opts: SpawnOptions): ManagedPty {
     config: opts.config,
     statusDetector,
     outputBuffer,
-    mcpConfigPath: opts.mcpConfigPath
+    mcpConfigPath: opts.mcpConfigPath,
+    buddyDetector
   }
 }
 
