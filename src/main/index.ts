@@ -22,8 +22,8 @@ const hasReceivedInitialPrompt = new Set<string>()
 const initialPrompts = new Map<string, string>()
 const manualKills = new Set<string>() // Track intentional kills to skip auto-reconnect
 const pendingNudges = new Map<string, string[]>() // agentName → queued nudge strings
-const CODEX_SUBMIT_DELAY = 2000
-const RECONNECT_DELAY = 3000
+const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter is sent
+const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
 const PROMPT_INJECT_FALLBACK_MS = 30000 // Safety net if StatusDetector doesn't detect prompt
 
 function getMcpServerPath(): string {
