@@ -3,6 +3,7 @@ import type { AgentRegistry } from './agent-registry'
 import type { MessageRouter } from './message-router'
 import type { Pinboard } from './pinboard'
 import type { InfoChannel } from './info-channel'
+import type { BuddyRoom } from './buddy-room'
 import type { AgentConfig } from '../../shared/types'
 import type { MessageStore } from '../db/message-store'
 
@@ -14,7 +15,8 @@ export function createRoutes(
   outputRef: { accessor: OutputAccessor | null },
   pinboard: Pinboard,
   infoChannel: InfoChannel,
-  messageStoreRef: { store: MessageStore | null } = { store: null }
+  messageStoreRef: { store: MessageStore | null } = { store: null },
+  buddyRoom?: BuddyRoom
 ): Router {
   const router = Router()
 
@@ -201,6 +203,17 @@ export function createRoutes(
     } catch (err: any) {
       res.status(400).json({ error: err.message })
     }
+  })
+
+  // --- Buddy Room route ---
+
+  router.get('/buddy-room', (req: Request, res: Response) => {
+    if (!buddyRoom) {
+      res.json([])
+      return
+    }
+    const count = Math.min(Math.max(Number(req.query.count) || 50, 1), 200)
+    res.json(buddyRoom.getMessages(count))
   })
 
   // --- Output route ---

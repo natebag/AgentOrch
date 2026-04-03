@@ -399,6 +399,23 @@ server.tool(
   }
 )
 
+server.tool(
+  'read_buddy_room',
+  'Read recent companion/buddy speech from all agent terminals. Companions are small characters that occasionally comment on agent activity. Their observations can provide useful insights.',
+  {
+    count: z.number().optional().default(20).describe('Number of recent messages to retrieve (default 20, max 200)')
+  },
+  async ({ count }) => {
+    try {
+      const result = await hubFetch(`/buddy-room?count=${count}`)
+      if (result.length === 0) return toolResult('No buddy messages yet.')
+      return toolResult(result)
+    } catch (err: any) {
+      return toolError(`Failed to read buddy room: ${err.message}`)
+    }
+  }
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

@@ -45,7 +45,7 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
 
     const outputRef: { accessor: OutputAccessor | null } = { accessor: null }
     const messageStoreRef: { store: MessageStore | null } = { store: null }
-    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel, messageStoreRef))
+    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel, messageStoreRef, buddyRoom))
 
     const server: Server = app.listen(preferredPort, '127.0.0.1', () => {
       const addr = server.address()
