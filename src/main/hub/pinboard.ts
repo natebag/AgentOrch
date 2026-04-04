@@ -10,6 +10,7 @@ export interface PinboardTask {
   claimedBy: string | null
   result: string | null
   createdAt: string
+  groupId?: string
 }
 
 export class Pinboard {
@@ -17,7 +18,7 @@ export class Pinboard {
   onTaskCreated?: (task: PinboardTask) => void
   onTaskUpdated?: (task: PinboardTask) => void
 
-  postTask(title: string, description: string, priority: 'low' | 'medium' | 'high' = 'medium', createdBy?: string): PinboardTask {
+  postTask(title: string, description: string, priority: 'low' | 'medium' | 'high' = 'medium', createdBy?: string, groupId?: string): PinboardTask {
     const task: PinboardTask = {
       id: uuid(),
       title,
@@ -27,7 +28,8 @@ export class Pinboard {
       createdBy: createdBy ?? null,
       claimedBy: null,
       result: null,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      groupId: groupId ?? undefined
     }
     this.tasks.set(task.id, task)
     this.onTaskCreated?.(task)
@@ -42,6 +44,11 @@ export class Pinboard {
 
   readTasks(): PinboardTask[] {
     return Array.from(this.tasks.values())
+  }
+
+  readTasksForGroup(groupId: string | null): PinboardTask[] {
+    if (!groupId) return this.readTasks()
+    return this.readTasks().filter(t => !t.groupId || t.groupId === groupId)
   }
 
   claimTask(taskId: string, agentName: string): { status: string; detail: string } {

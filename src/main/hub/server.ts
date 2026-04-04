@@ -7,6 +7,7 @@ import { InfoChannel } from './info-channel'
 import { generateSecret, validateSecret } from './auth'
 import { createRoutes, type OutputAccessor } from './routes'
 import { BuddyRoom } from './buddy-room'
+import { GroupManager } from './group-manager'
 import type { MessageStore } from '../db/message-store'
 
 export interface HubServer {
@@ -17,6 +18,7 @@ export interface HubServer {
   pinboard: Pinboard
   infoChannel: InfoChannel
   buddyRoom: BuddyRoom
+  groupManager: GroupManager
   setOutputAccessor: (fn: OutputAccessor) => void
   setMessageStore: (store: MessageStore) => void
   setProjectPath: (projectPath: string) => void
@@ -28,7 +30,8 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     const app = express()
     const secret = generateSecret()
     const registry = new AgentRegistry()
-    const messages = new MessageRouter(registry)
+    const groupManager = new GroupManager()
+    const messages = new MessageRouter(registry, groupManager)
     const pinboard = new Pinboard()
     const infoChannel = new InfoChannel()
     const buddyRoom = new BuddyRoom()
@@ -63,6 +66,7 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
         pinboard,
         infoChannel,
         buddyRoom,
+        groupManager,
         setOutputAccessor: (fn) => { outputRef.accessor = fn },
         setMessageStore: (store) => { messageStoreRef.store = store },
         setProjectPath: (p) => { projectPathRef.path = p },

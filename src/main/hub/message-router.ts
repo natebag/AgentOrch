@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import type { Message, SendMessageResult, BroadcastResult } from '../../shared/types'
 import type { AgentRegistry } from './agent-registry'
+import type { GroupManager } from './group-manager'
 
 const MAX_MESSAGE_SIZE = 10 * 1024
 const MAX_QUEUE_DEPTH = 100
@@ -13,7 +14,7 @@ export class MessageRouter {
   onMessageQueued?: (msg: Message) => void
   onMessageSaved?: (msg: Message) => void
 
-  constructor(private registry: AgentRegistry) {}
+  constructor(private registry: AgentRegistry, private groupManager?: GroupManager) {}
 
   send(from: string, to: string, message: string, skipRateLimit = false): SendMessageResult {
     if (message.length > MAX_MESSAGE_SIZE) {
@@ -35,12 +36,18 @@ export class MessageRouter {
       return { status: 'error', detail: `Agent '${to}' not found` }
     }
 
+    // Group scoping: check if sender can communicate with target
+    if (this.groupManager && !this.groupManager.canCommunicate(from, to)) {
+      return { status: 'error', detail: `Agent '${to}' is not in your group` }
+    }
+
     const msg: Message = {
       id: uuid(),
       from,
       to,
       message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      groupId: this.groupManager?.getGroupIdForAgent(from) ?? undefined
     }
 
     if (!this.queues.has(to)) {

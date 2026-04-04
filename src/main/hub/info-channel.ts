@@ -10,7 +10,7 @@ export class InfoChannel {
   onEntryUpdated?: (entry: InfoEntry) => void
   onEntryDeleted?: (id: string) => void
 
-  postInfo(from: string, note: string, tags: string[] = []): InfoEntry {
+  postInfo(from: string, note: string, tags: string[] = [], groupId?: string): InfoEntry {
     if (note.length > MAX_NOTE_SIZE) {
       throw new Error(`Note exceeds max size of ${MAX_NOTE_SIZE} bytes`)
     }
@@ -20,7 +20,8 @@ export class InfoChannel {
       from,
       note,
       tags,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      groupId: groupId ?? undefined
     }
 
     this.entries.push(entry)
@@ -40,9 +41,19 @@ export class InfoChannel {
     }
 
     // Filter to entries matching ANY of the provided tags
-    return this.entries.filter(entry => 
+    return this.entries.filter(entry =>
       entry.tags.some(tag => tags.includes(tag))
     )
+  }
+
+  readInfoForGroup(groupId: string | null, tags?: string[]): InfoEntry[] {
+    let entries = groupId
+      ? this.entries.filter(e => !e.groupId || e.groupId === groupId)
+      : [...this.entries]
+    if (tags && tags.length > 0) {
+      entries = entries.filter(entry => entry.tags.some(tag => tags.includes(tag)))
+    }
+    return entries
   }
 
   deleteInfo(id: string): boolean {
