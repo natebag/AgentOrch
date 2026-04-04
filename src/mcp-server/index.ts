@@ -492,6 +492,25 @@ server.tool(
   }
 )
 
+server.tool(
+  'get_my_group',
+  'Get information about your communication group — who you can talk to, group name, and members. Returns null if you are unlinked (global access).',
+  {},
+  async () => {
+    try {
+      const agents = await hubFetch('/agents')
+      const me = agents.find((a: any) => a.name === AGENT_NAME)
+      if (!me || !me.groupId) return toolResult('You are unlinked — you have global access to all agents, tasks, and info.')
+      const groups = await hubFetch('/groups')
+      const myGroup = groups.find((g: any) => g.members.includes(AGENT_NAME))
+      if (!myGroup) return toolResult('You are unlinked — global access.')
+      return toolResult(myGroup)
+    } catch (err: any) {
+      return toolError(`Failed to get group info: ${err.message}`)
+    }
+  }
+)
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

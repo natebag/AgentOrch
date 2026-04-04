@@ -39,6 +39,24 @@ function getVisibleAgents() {
   return hub.registry.list().filter(a => a.name !== 'user')
 }
 
+function saveLinkState(): void {
+  if (!projectManager?.currentProject || !hub) return
+  const linksPath = path.join(projectManager.currentProject.path, '.agentorch', 'links.json')
+  const state = hub.groupManager.exportState()
+  fs.writeFileSync(linksPath, JSON.stringify(state, null, 2), 'utf-8')
+}
+
+function loadLinkState(): void {
+  if (!projectManager?.currentProject || !hub) return
+  const linksPath = path.join(projectManager.currentProject.path, '.agentorch', 'links.json')
+  if (fs.existsSync(linksPath)) {
+    try {
+      const state = JSON.parse(fs.readFileSync(linksPath, 'utf-8'))
+      hub.groupManager.importState(state)
+    } catch { /* corrupt file */ }
+  }
+}
+
 function getMcpServerPath(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'mcp-server', 'index.js')
@@ -426,6 +444,7 @@ async function openProject(projectPath: string): Promise<void> {
   setupMessageNudge()
   setupTaskNudge()
   setupInfoNudge()
+  loadLinkState()
 
   // Update window title
   if (mainWindow) {
@@ -668,6 +687,34 @@ function setupIPC(): void {
   // Buddy Room IPC handlers
   ipcMain.handle(IPC.BUDDY_GET_MESSAGES, () => {
     return hub?.buddyRoom.getMessages() ?? []
+  })
+
+  // Group IPC
+  ipcMain.handle(IPC.GROUP_GET_ALL, () => hub?.groupManager.getGroups() ?? [])
+  ipcMain.handle(IPC.GROUP_GET_LINKS, () => hub?.groupManager.getLinks() ?? [])
+
+  ipcMain.handle(IPC.GROUP_ADD_LINK, (_event, from: string, to: string) => {
+    if (!hub) return { error: 'No project open' }
+    hub.groupManager.addLink(from, to)
+    for (const agent of hub.registry.list()) {
+      const gid = hub.groupManager.getGroupIdForAgent(agent.name)
+      agent.groupId = gid ?? undefined
+    }
+    mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    saveLinkState()
+    return { status: 'ok', groups: hub.groupManager.getGroups() }
+  })
+
+  ipcMain.handle(IPC.GROUP_REMOVE_LINK, (_event, from: string, to: string) => {
+    if (!hub) return { error: 'No project open' }
+    hub.groupManager.removeLink(from, to)
+    for (const agent of hub.registry.list()) {
+      const gid = hub.groupManager.getGroupIdForAgent(agent.name)
+      agent.groupId = gid ?? undefined
+    }
+    mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    saveLinkState()
+    return { status: 'ok', groups: hub.groupManager.getGroups() }
   })
 
   // Project management IPC

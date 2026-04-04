@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.BUDDY_MESSAGE_ADDED, handler)
     return () => ipcRenderer.removeListener(IPC.BUDDY_MESSAGE_ADDED, handler)
   },
+  // Groups
+  getGroups: () => ipcRenderer.invoke(IPC.GROUP_GET_ALL),
+  getLinks: () => ipcRenderer.invoke(IPC.GROUP_GET_LINKS),
+  addLink: (from: string, to: string) => ipcRenderer.invoke(IPC.GROUP_ADD_LINK, from, to),
+  removeLink: (from: string, to: string) => ipcRenderer.invoke(IPC.GROUP_REMOVE_LINK, from, to),
   // Project management
   getProject: () => ipcRenderer.invoke(IPC.PROJECT_GET_CURRENT),
   switchProject: (path: string) => ipcRenderer.invoke(IPC.PROJECT_SWITCH, path),

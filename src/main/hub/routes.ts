@@ -6,6 +6,7 @@ import type { MessageRouter } from './message-router'
 import type { Pinboard } from './pinboard'
 import type { InfoChannel } from './info-channel'
 import type { BuddyRoom } from './buddy-room'
+import type { GroupManager } from './group-manager'
 import type { AgentConfig } from '../../shared/types'
 import type { MessageStore } from '../db/message-store'
 
@@ -19,7 +20,8 @@ export function createRoutes(
   infoChannel: InfoChannel,
   messageStoreRef: { store: MessageStore | null } = { store: null },
   buddyRoom?: BuddyRoom,
-  projectPathRef: { path: string | null } = { path: null }
+  projectPathRef: { path: string | null } = { path: null },
+  groupManager?: GroupManager
 ): Router {
   const router = Router()
 
@@ -344,6 +346,34 @@ export function createRoutes(
     }
     const count = Math.min(Math.max(Number(req.query.count) || 50, 1), 200)
     res.json(buddyRoom.getMessages(count))
+  })
+
+  // --- Group routes ---
+
+  router.get('/groups', (_req: Request, res: Response) => {
+    if (!groupManager) { res.json([]); return }
+    res.json(groupManager.getGroups())
+  })
+
+  router.get('/groups/links', (_req: Request, res: Response) => {
+    if (!groupManager) { res.json([]); return }
+    res.json(groupManager.getLinks())
+  })
+
+  router.post('/groups/link', (req: Request, res: Response) => {
+    if (!groupManager) { res.status(503).json({ error: 'Groups not available' }); return }
+    const { from, to } = req.body
+    if (!from || !to) { res.status(400).json({ error: 'from and to required' }); return }
+    groupManager.addLink(from, to)
+    res.json({ status: 'ok', groups: groupManager.getGroups() })
+  })
+
+  router.delete('/groups/link', (req: Request, res: Response) => {
+    if (!groupManager) { res.status(503).json({ error: 'Groups not available' }); return }
+    const { from, to } = req.body
+    if (!from || !to) { res.status(400).json({ error: 'from and to required' }); return }
+    groupManager.removeLink(from, to)
+    res.json({ status: 'ok', groups: groupManager.getGroups() })
   })
 
   // --- Output route ---
