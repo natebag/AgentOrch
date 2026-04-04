@@ -25,9 +25,10 @@ export function LinkOverlay({
     if (!agent) return null
     const win = windows.find(w => w.id === agent.id)
     if (!win) return null
+    // Raw coordinates — the SVG is inside the transform container so zoom/pan is already applied
     return {
-      x: (win.x + win.width) * zoom + pan.x,
-      y: (win.y + win.height / 2) * zoom + pan.y
+      x: win.x + win.width,
+      y: win.y + win.height / 2
     }
   }
 
@@ -42,8 +43,8 @@ export function LinkOverlay({
 
   return (
     <svg style={{
-      position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-      pointerEvents: 'none', zIndex: 1
+      position: 'absolute', top: 0, left: 0, width: '10000px', height: '10000px',
+      pointerEvents: 'none', zIndex: 9999, overflow: 'visible'
     }}>
       {links.map((link, i) => {
         const fromPos = getPortPosition(link.from)
