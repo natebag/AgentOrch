@@ -414,7 +414,8 @@ function writeNudgeToPty(managed: ManagedPty, nudge: string): void {
   // The agent CLI just needs the message text, not shell-valid syntax
   const safe = nudge.replace(/[()[\]{}$`"']/g, '')
 
-  if (managed.config.cli === 'codex') {
+  if (managed.config.cli === 'codex' || managed.config.cli === 'gemini') {
+    // TUI-based CLIs need text rendered before Enter triggers submit
     writeToPty(managed, safe)
     setTimeout(() => writeToPty(managed, '\r'), CODEX_SUBMIT_DELAY)
   } else {

@@ -724,6 +724,13 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
                       <div style={{ fontSize: '11px', color: '#666' }}>{formatDate(preset.savedAt)}</div>
                     </div>
                     <button
+                      onClick={e => { e.stopPropagation(); setPresetName(preset.name); setActiveTab('save') }}
+                      style={editBtnStyle}
+                      title="Edit preset"
+                    >
+                      &#9998;
+                    </button>
+                    <button
                       onClick={e => handleDelete(preset.name, e)}
                       style={deleteBtnStyle}
                       title="Delete preset"
@@ -944,6 +951,20 @@ const selectedPresetItemStyle: React.CSSProperties = {
   border: '1px solid #4caf50',
   borderRadius: '4px',
   cursor: 'pointer'
+}
+
+const editBtnStyle: React.CSSProperties = {
+  width: '24px',
+  height: '24px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+  border: 'none',
+  color: '#666',
+  fontSize: '14px',
+  cursor: 'pointer',
+  borderRadius: '4px'
 }
 
 const deleteBtnStyle: React.CSSProperties = {

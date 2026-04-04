@@ -22,10 +22,11 @@ export function UpdateNotice(): React.ReactElement | null {
   const [phase, setPhase] = useState<Phase>('notify')
   const [errorMsg, setErrorMsg] = useState('')
   const [dismissed, setDismissed] = useState(false)
+  const [dismissedSha, setDismissedSha] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = electronAPI.onUpdateAvailable((info: UpdateInfo) => {
-      if (info.available) {
+      if (info.available && info.remoteSha !== dismissedSha) {
         setUpdate(info)
         setPhase('notify')
         setDismissed(false)
@@ -69,7 +70,7 @@ export function UpdateNotice(): React.ReactElement | null {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
         <span style={{ fontWeight: 600, color: '#8cc4ff' }}>Update Available</span>
-        <button onClick={() => setDismissed(true)} style={{
+        <button onClick={() => { setDismissed(true); if (update) setDismissedSha(update.remoteSha) }} style={{
           background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px', padding: '0 2px'
         }}>x</button>
       </div>
@@ -87,7 +88,7 @@ export function UpdateNotice(): React.ReactElement | null {
             padding: '4px 12px', backgroundColor: '#2d5a2d', border: '1px solid #4caf50',
             borderRadius: '4px', color: '#4caf50', cursor: 'pointer', fontSize: '11px'
           }}>Update Now</button>
-          <button onClick={() => setDismissed(true)} style={{
+          <button onClick={() => { setDismissed(true); if (update) setDismissedSha(update.remoteSha) }} style={{
             padding: '4px 12px', backgroundColor: 'transparent', border: '1px solid #444',
             borderRadius: '4px', color: '#888', cursor: 'pointer', fontSize: '11px'
           }}>Later</button>
