@@ -22,6 +22,7 @@ const INFO_ID = '__info__'
 const BUDDY_ID = '__buddy__'
 const FILES_ID = '__files__'
 const RAC_ID = '__rac__'
+const USAGE_ID = '__usage__'
 
 export function App(): React.ReactElement {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
@@ -46,6 +47,7 @@ export function App(): React.ReactElement {
   const buddyOpen = windows.some(w => w.id === BUDDY_ID)
   const filesOpen = windows.some(w => w.id === FILES_ID)
   const racOpen = windows.some(w => w.id === RAC_ID)
+  const usageOpen = windows.some(w => w.id === USAGE_ID)
 
   const handleSpawn = useCallback(async (config: Omit<AgentConfig, 'id'>) => {
     setShowSpawnDialog(false)
@@ -55,7 +57,7 @@ export function App(): React.ReactElement {
 
   const handleClose = useCallback(async (windowId: string) => {
     // Panel windows just get removed, no agent to kill
-    if (windowId === PINBOARD_ID || windowId === INFO_ID || windowId === BUDDY_ID || windowId === FILES_ID || windowId === RAC_ID) {
+    if (windowId === PINBOARD_ID || windowId === INFO_ID || windowId === BUDDY_ID || windowId === FILES_ID || windowId === RAC_ID || windowId === USAGE_ID) {
       removeWindow(windowId)
       return
     }
@@ -118,6 +120,14 @@ export function App(): React.ReactElement {
       addWindow(RAC_ID, 'R.A.C.')
     }
   }, [racOpen, addWindow, removeWindow])
+
+  const toggleUsage = useCallback(() => {
+    if (usageOpen) {
+      removeWindow(USAGE_ID)
+    } else {
+      addWindow(USAGE_ID, 'Usage')
+    }
+  }, [usageOpen, addWindow, removeWindow])
 
   // Load links & groups when project changes
   useEffect(() => {
@@ -252,6 +262,8 @@ export function App(): React.ReactElement {
             onToggleFiles={toggleFiles}
             racOpen={racOpen}
             onToggleRac={toggleRac}
+            usageOpen={usageOpen}
+            onToggleUsage={toggleUsage}
             onPresetsClick={() => setShowPresetDialog(true)}
             onBugReport={() => setShowBugReport(true)}
             onSettingsClick={() => setShowSettings(true)}
