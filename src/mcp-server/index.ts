@@ -91,14 +91,14 @@ server.tool(
 
 server.tool(
   'get_messages',
-  'Check for messages sent to you by other agents. By default, messages are returned without clearing the queue (peek mode). Call ack_messages() with the message IDs to remove them after processing.',
+  'Check for messages sent to you by other agents. By default, messages are returned without clearing the queue (peek mode). Call ack_messages() with the message IDs to remove them after processing. IMPORTANT: Do NOT poll this in a loop — you will be nudged automatically when a message arrives.',
   {
     peek: z.boolean().optional().default(true).describe('If true (default), messages stay in queue. Set to false to clear on read (legacy behavior).')
   },
   async ({ peek }) => {
     try {
       const messages = await hubFetch(`/messages/${encodeURIComponent(AGENT_NAME)}?peek=${peek}`)
-      if (messages.length === 0) return toolResult('No new messages.')
+      if (messages.length === 0) return toolResult('No new messages. STOP — do NOT call get_messages() again. You will be nudged automatically when a new message arrives. Wait for the nudge.')
       return toolResult(messages)
     } catch (err: any) {
       return toolError(`Failed to get messages: ${err.message}`)
@@ -212,12 +212,12 @@ server.tool(
 
 server.tool(
   'read_tasks',
-  'List all tasks on the shared pinboard. Shows id, title, description, priority, status, claimedBy, result, and createdAt.',
+  'List all tasks on the shared pinboard. Shows id, title, description, priority, status, claimedBy, result, and createdAt. IMPORTANT: Do NOT poll this in a loop — you will be nudged automatically when a new task is posted.',
   {},
   async () => {
     try {
       const tasks = await hubFetch('/pinboard/tasks')
-      if (tasks.length === 0) return toolResult('No tasks on the pinboard.')
+      if (tasks.length === 0) return toolResult('No tasks on the pinboard. STOP — do NOT poll read_tasks() again. You will be nudged automatically when a new task is posted. Wait for the nudge.')
       return toolResult(tasks)
     } catch (err: any) {
       return toolError(`Failed to read tasks: ${err.message}`)
