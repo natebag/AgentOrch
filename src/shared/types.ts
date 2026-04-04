@@ -119,6 +119,17 @@ export const IPC = {
   AGENT_CLEAR_CONTEXT: 'agent:clear-context',
   USAGE_GET_METRICS: 'usage:get-metrics',
   USAGE_REFRESH_LIMITS: 'usage:refresh-limits',
+  GIT_STATUS: 'git:status',
+  GIT_LOG: 'git:log',
+  GIT_DIFF: 'git:diff',
+  GIT_STAGE: 'git:stage',
+  GIT_UNSTAGE: 'git:unstage',
+  GIT_COMMIT: 'git:commit',
+  GIT_PUSH: 'git:push',
+  GIT_PULL: 'git:pull',
+  GIT_BRANCHES: 'git:branches',
+  GIT_CHECKOUT: 'git:checkout',
+  GIT_NEW_BRANCH: 'git:new-branch',
 } as const
 
 export interface BuddyMessage {
@@ -168,6 +179,28 @@ export interface AgentMetricsData {
     unit: string
     raw?: string
   }
+}
+
+export interface GitFileStatus {
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  staged: boolean
+}
+
+export interface GitStatus {
+  branch: string
+  ahead: number
+  behind: number
+  staged: GitFileStatus[]
+  unstaged: GitFileStatus[]
+  isRepo: boolean
+}
+
+export interface GitLogEntry {
+  sha: string
+  message: string
+  author: string
+  relativeDate: string
 }
 
 export interface RacSlot {
