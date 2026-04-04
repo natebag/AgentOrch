@@ -207,12 +207,10 @@ export function GitPanel(): React.ReactElement {
     }
   }, [])
 
-  // Initial load + auto-refresh
+  // Load once on mount — no auto-refresh (expensive on large repos)
   useEffect(() => {
     refreshStatus()
     refreshLog()
-    const interval = setInterval(refreshStatus, 15000)
-    return () => clearInterval(interval)
   }, [refreshStatus, refreshLog])
 
   // Close branch dropdown on outside click
@@ -557,6 +555,7 @@ export function GitPanel(): React.ReactElement {
           <Btn label="+ Branch" onClick={() => setShowNewBranch(true)} small />
         )}
 
+        <Btn label={'\u21BB'} onClick={() => { refreshStatus(); refreshLog() }} small />
         <Btn label="Pull" onClick={pull} small loading={loading === 'pull'} />
         <Btn label="Push" onClick={push} small loading={loading === 'push'} disabled={status.ahead === 0} />
       </div>

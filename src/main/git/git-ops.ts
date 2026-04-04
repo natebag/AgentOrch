@@ -54,8 +54,12 @@ export function getStatus(cwd: string): GitStatus {
   const staged: GitFileStatus[] = []
   const unstaged: GitFileStatus[] = []
 
-  for (const line of statusOutput.split('\n')) {
+  const lines = statusOutput.split('\n')
+  const MAX_FILES = 200 // cap to prevent UI lag on huge repos
+
+  for (const line of lines) {
     if (!line.trim()) continue
+    if (staged.length + unstaged.length >= MAX_FILES) break
     const parsed = parseStatusLine(line)
     if (!parsed) continue
     if (parsed.staged) {
