@@ -38,8 +38,11 @@ const CLI_MODELS: Record<string, { label: string; value: string }[]> = {
   ],
   codex: [
     { label: 'o4-mini (default)', value: '' },
-    { label: 'GPT-4.1', value: 'gpt-4.1' },
     { label: 'o3', value: 'o3' },
+    { label: 'o3-pro', value: 'o3-pro' },
+    { label: 'GPT-5', value: 'gpt-5' },
+    { label: 'GPT-4.1', value: 'gpt-4.1' },
+    { label: 'GPT-4.1 mini', value: 'gpt-4.1-mini' },
   ],
   kimi: [
     { label: 'Default', value: '' },
@@ -56,8 +59,10 @@ const CLI_MODELS: Record<string, { label: string; value: string }[]> = {
   ],
   copilot: [
     { label: 'Default (Copilot model)', value: '' },
+    { label: 'GPT-5', value: 'gpt-5' },
     { label: 'GPT-4o', value: 'gpt-4o' },
-    { label: 'o3-mini', value: 'o3-mini' },
+    { label: 'o3', value: 'o3' },
+    { label: 'o4-mini', value: 'o4-mini' },
   ],
   grok: [
     { label: 'Default', value: '' },
@@ -66,13 +71,30 @@ const CLI_MODELS: Record<string, { label: string; value: string }[]> = {
     { label: 'Grok 2', value: 'grok-2' },
   ],
   openclaude: [
+    // OpenAI
+    { label: 'GPT-5', value: 'gpt-5' },
     { label: 'GPT-4o', value: 'gpt-4o' },
     { label: 'GPT-4.1', value: 'gpt-4.1' },
-    { label: 'DeepSeek Chat', value: 'deepseek-chat' },
-    { label: 'DeepSeek Reasoner', value: 'deepseek-reasoner' },
-    { label: 'Llama 3 (Ollama)', value: 'llama3' },
+    { label: 'GPT-4.1 mini', value: 'gpt-4.1-mini' },
+    { label: 'o3', value: 'o3' },
+    { label: 'o3-pro', value: 'o3-pro' },
+    { label: 'o4-mini', value: 'o4-mini' },
+    // DeepSeek
+    { label: 'DeepSeek V3', value: 'deepseek-chat' },
+    { label: 'DeepSeek R1', value: 'deepseek-reasoner' },
+    // Meta / Ollama
+    { label: 'Llama 4 Scout (Ollama)', value: 'llama4-scout' },
+    { label: 'Llama 4 Maverick (Ollama)', value: 'llama4-maverick' },
+    { label: 'Llama 3.3 70B (Ollama)', value: 'llama3.3' },
+    { label: 'Llama 3.1 8B (Ollama)', value: 'llama3.1:8b' },
+    // Mistral
     { label: 'Mistral Large', value: 'mistral-large-latest' },
-    { label: 'Custom', value: '' },
+    { label: 'Codestral', value: 'codestral-latest' },
+    // Qwen
+    { label: 'Qwen 3 (Ollama)', value: 'qwen3' },
+    { label: 'Qwen 2.5 Coder (Ollama)', value: 'qwen2.5-coder' },
+    // Custom
+    { label: 'Custom Model', value: '' },
   ],
 }
 
