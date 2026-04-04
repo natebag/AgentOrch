@@ -160,6 +160,11 @@ export function createRoutes(
     res.json(result)
   })
 
+  router.post('/pinboard/clear-completed', (_req: Request, res: Response) => {
+    const cleared = pinboard.clearCompleted()
+    res.json({ status: 'ok', cleared })
+  })
+
   router.get('/pinboard/tasks/:id', (req: Request, res: Response) => {
     const task = pinboard.getTask(req.params.id)
     if (!task) {

@@ -345,6 +345,23 @@ server.tool(
 )
 
 server.tool(
+  'clear_completed_tasks',
+  'Remove all completed tasks from the pinboard. Keeps open and in-progress tasks.',
+  {},
+  async () => {
+    try {
+      const result = await hubFetch('/pinboard/clear-completed', {
+        method: 'POST',
+        body: JSON.stringify({})
+      })
+      return toolResult(`Cleared ${result.cleared} completed task(s) from the pinboard.`)
+    } catch (err: any) {
+      return toolError(`Failed to clear tasks: ${err.message}`)
+    }
+  }
+)
+
+server.tool(
   'get_task',
   'Get a single task by ID. More efficient than read_tasks when you only need one task\'s status.',
   {

@@ -103,4 +103,15 @@ export class Pinboard {
   getTask(taskId: string): PinboardTask | undefined {
     return this.tasks.get(taskId)
   }
+
+  clearCompleted(): number {
+    let cleared = 0
+    for (const [id, task] of this.tasks) {
+      if (task.status === 'completed') {
+        this.tasks.delete(id)
+        cleared++
+      }
+    }
+    return cleared
+  }
 }
