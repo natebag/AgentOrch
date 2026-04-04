@@ -1,5 +1,0 @@
-error: unexpected argument ';' found
-
-Usage: codex mcp remove [OPTIONS] <NAME>
-
-For more information, try '--help'.

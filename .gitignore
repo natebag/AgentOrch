@@ -5,3 +5,5 @@ dist/
 *.tmp
 marketing/
 .superpowers/
+docs/superpowers/
+$null

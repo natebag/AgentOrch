@@ -1,16 +1,23 @@
 # AgentOrch
 
-A desktop workspace for orchestrating multiple AI coding agents. Spawn Claude Code, Codex CLI, Kimi CLI, or any terminal — and let them talk to each other via MCP.
+The AI-native agent orchestration IDE. Spawn teams of AI coding agents across multiple models and providers, watch them work in floating terminal windows, and orchestrate from above.
 
-No more copy-pasting between terminals. The orchestrator sends tasks, workers pick them up, results flow back automatically.
+No more copy-pasting between terminals. Agents communicate through MCP tools — messaging, task boards, shared knowledge, file operations — all in one workspace.
 
 ## What It Does
 
-- **Floating terminal windows** — drag, resize, overlap, minimize, maximize. Like a desktop window manager for your agent CLIs.
-- **MCP-based messaging** — agents get `send_message`, `get_messages`, `get_agents`, and `read_ceo_notes` tools. The orchestrator dispatches work, workers report back.
-- **Auto-nudge** — when a message arrives, the target agent's terminal gets nudged to check their inbox. No manual polling.
-- **CEO Notes** — write per-agent instructions once. Every agent can read them. The orchestrator sees everyone's role and notes via `get_agents()`.
-- **Multi-CLI support** — Claude Code, Codex CLI, Kimi CLI, plain terminals, or any custom command. Each gets the right MCP integration automatically.
+- **Multi-agent workspace** — floating terminal windows on an infinite canvas. Drag, resize, snap, zoom.
+- **22+ MCP tools** — agents message each other, post tasks, share research, read/write files, and more.
+- **Multi-model teams** — Claude, Codex, Kimi, Gemini, Copilot, Grok, OpenClaude (200+ models via OpenAI-compatible providers), or plain terminals.
+- **39 preset templates** — pre-built team configurations. Search + filter by available CLIs.
+- **Skills system** — composable capability modules. Attach "Code Reviewer" + "Security Auditor" + "TypeScript Expert" to an agent. 15 built-in, create your own, browse 90k+ community skills.
+- **File Explorer + Editor** — browse project files, edit with Monaco Editor (VS Code's engine), syntax highlighting, tabs.
+- **Communication graph** — Blender-style node links between agents. Drag to connect. Linked agents form isolated groups with scoped messaging and tasks.
+- **Project-based persistence** — each project gets its own `.agentorch/` folder with isolated DB and presets. Data survives restarts.
+- **Auto-updater** — checks for updates every 2 minutes, one-click update + restart.
+- **Bug reporter** — built-in bug report submission, no login required.
+- **System notifications** — desktop alerts when tasks are completed.
+- **Usage panel** — per-agent activity tracking + on-demand provider limit checks.
 
 ## Quick Start
 
@@ -21,94 +28,97 @@ npm install
 npm run dev
 ```
 
-Click **+** to spawn an agent. Fill in:
-- **Name** — how other agents refer to this one (e.g., "orchestrator", "worker-1")
-- **CLI** — Claude Code, Codex, Kimi, Plain Terminal, or Custom
-- **Working Directory** — where the agent operates (use Browse to pick)
+Requires: Node.js 20+, at least one AI CLI installed (Claude Code, Codex, Kimi, Gemini, etc.)
+
+## Spawning Agents
+
+Click **+** to spawn an agent:
+- **Name** — how other agents refer to this one
+- **CLI** — Claude Code, Codex, Kimi, Gemini, OpenClaude, Copilot, Grok, or plain terminal
+- **Model** — specific model per CLI (Opus, Sonnet, GPT-5, DeepSeek, Llama, etc.)
 - **Role** — Orchestrator, Worker, Researcher, Reviewer, or Custom
-- **CEO Notes** — instructions for this agent (visible to all other agents)
-- **Auto-approve mode** — skip permission prompts (Claude: `--dangerously-skip-permissions`, Codex: `--yolo`, Kimi: `--dangerously-skip-permissions`)
+- **Skills** — attach capability modules from the skill browser
+- **CEO Notes** — free-text instructions (combined with skills)
+- **Auto-approve** — skip permission prompts
+
+Or use **Presets** → **Templates** to launch a pre-configured team with one click.
 
 ## How Agents Communicate
 
-Each agent gets 4 MCP tools:
+Agents get 23 MCP tools:
 
-| Tool | What it does |
-|------|-------------|
-| `send_message(to, message)` | Send a message to another agent by name |
-| `get_messages()` | Check inbox — returns queued messages, clears the queue |
-| `get_agents()` | See all agents, their roles, CLI types, CEO notes, and status |
-| `read_ceo_notes()` | Re-read your own CEO notes and role |
+| Category | Tools |
+|----------|-------|
+| **Messaging** | `send_message`, `get_messages`, `ack_messages`, `broadcast`, `get_message_history` |
+| **Tasks** | `post_task`, `read_tasks`, `get_task`, `claim_task`, `complete_task`, `abandon_task`, `clear_completed_tasks` |
+| **Info** | `post_info`, `read_info`, `update_info`, `delete_info` |
+| **Agents** | `get_agents`, `read_ceo_notes`, `update_status`, `get_agent_output`, `get_my_group` |
+| **Files** | `read_file`, `write_file`, `list_directory` |
+| **Other** | `read_buddy_room` |
 
-**Example flow:**
-1. You tell the orchestrator: "Dispatch work to the workers"
-2. Orchestrator calls `get_agents()` to see who's available
-3. Orchestrator calls `send_message("worker-1", "Decompile this class...")`
-4. Worker-1 gets nudged, calls `get_messages()`, receives the task
-5. Worker-1 does the work, calls `send_message("orchestrator", "Done, here's what I found...")`
-6. Orchestrator picks it up and dispatches the next task
+**Auto-nudge:** Agents don't poll — they wait. When a message arrives or a task is posted, the agent gets nudged automatically. Zero wasted tokens.
+
+## Communication Groups
+
+Drag from one agent's link port to another to create a connection. Connected agents form a **group** — they can only see each other's messages, tasks, and info. Unlinked agents have global access (backward compatible).
+
+Hover over a link line to see the delete button. Click to remove the connection.
 
 ## Architecture
 
 ```
 Electron App
-  |
-  +-- Hub HTTP Server (localhost, auto-port)
-  |     +-- Agent Registry (names, roles, CEO notes, status)
-  |     +-- Message Router (queues, nudges, delivery)
-  |     +-- Auth (shared secret per session)
-  |
-  +-- Per-Agent MCP Server (spawned by each CLI via stdio)
-  |     +-- Thin relay: MCP tool calls -> Hub HTTP API
-  |
-  +-- PTY Manager (node-pty)
-  |     +-- Real terminal per agent
-  |     +-- Status detection (idle/active/working/disconnected)
-  |
-  +-- React UI
-        +-- Floating windows (react-rnd)
-        +-- xterm.js terminals
-        +-- Spawn dialog, top bar, agent pills
+├── Hub Server (Express, localhost)
+│   ├── Agent Registry + Heartbeat
+│   ├── Message Router (peek/ack, rate limiting, group scoping)
+│   ├── Pinboard (task management)
+│   ├── Info Channel (shared knowledge)
+│   ├── Buddy Room (companion speech log)
+│   ├── Group Manager (communication graph)
+│   ├── Agent Metrics (activity tracking)
+│   └── File Operations (project-scoped)
+├── MCP Server (per-agent, stdio)
+├── PTY Manager (node-pty terminals)
+├── Project Manager (per-project .agentorch/)
+├── Skill Manager (built-in + user skills)
+├── Update Checker (auto-update from GitHub)
+└── React UI
+    ├── Infinite canvas with floating windows
+    ├── Monaco Editor + file explorer
+    ├── 7 toggleable panels
+    └── Preset templates with search/filter
 ```
 
-## CLI Integration
+## Supported CLIs
 
-| CLI | MCP Method | Auto-approve |
-|-----|-----------|-------------|
-| Claude Code | `--mcp-config <file>` | `--dangerously-skip-permissions` |
-| Codex CLI | `codex mcp add` (auto-registered) | `--yolo` |
-| Kimi CLI | `--mcp-config-file <file>` | `--dangerously-skip-permissions` |
-| Plain Terminal | No MCP (manual use) | N/A |
-| Custom | No MCP | N/A |
-
-**Note:** For Kimi, use "Command Prompt (cmd)" in Advanced > Shell if PowerShell can't find the `kimi` command.
+| CLI | Models | Auto-approve |
+|-----|--------|-------------|
+| Claude Code | Opus, Sonnet, Haiku | `--dangerously-skip-permissions` |
+| Codex CLI | o4-mini, o3, GPT-5, GPT-5.4 | `--yolo` |
+| Kimi CLI | Default, K2.5, Thinking Turbo | `--yolo` |
+| Gemini CLI | 2.5 Pro, 2.5 Flash, 2.0 Flash | `--yolo` |
+| OpenClaude | 200+ models (GPT, DeepSeek, Ollama, Mistral, Qwen) | `--dangerously-skip-permissions` |
+| GitHub Copilot | Default, GPT-5, GPT-5.4 | `--allow-all` |
+| Grok CLI | Grok 3, Grok 3 Mini | N/A |
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+1` through `Ctrl+9` | Focus agent window by position |
+| `Ctrl+1-9` | Focus window by position |
 | `Ctrl+Tab` | Cycle through windows |
-| `Ctrl+C` | Copy selected text (or SIGINT if nothing selected) |
+| `Ctrl+0` | Reset zoom |
+| `Ctrl+Shift+0` | Fit all windows |
+| `Ctrl+S` | Save file (in editor) |
+| `Ctrl+C` | Copy selection (or SIGINT) |
 | `Ctrl+V` | Paste from clipboard |
-
-## Tech Stack
-
-- **Electron** + **React** + **TypeScript**
-- **xterm.js** for terminal emulation
-- **node-pty** for real PTY shells
-- **@modelcontextprotocol/sdk** for MCP server
-- **express** for the hub HTTP API
-- **react-rnd** for draggable/resizable windows
-- **electron-vite** for build tooling
 
 ## Development
 
 ```bash
 npm run dev          # Start in dev mode
 npm run build        # Production build
-npm run test         # Run all tests (vitest)
-npm run test:watch   # Watch mode
+npm test             # Run tests (vitest)
 npm run build:mcp    # Rebuild MCP server bundle
 ```
 
