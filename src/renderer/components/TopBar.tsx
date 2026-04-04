@@ -2,6 +2,13 @@ import React, { useState, useRef, useEffect } from 'react'
 import { AgentPill } from './AgentPill'
 import type { AgentState } from '../../shared/types'
 
+const STATUS_COLORS: Record<string, string> = {
+  idle: '#888',
+  active: '#4caf50',
+  working: '#ffc107',
+  disconnected: '#f44336'
+}
+
 interface TopBarProps {
   projectName: string | null
   onSwitchProject: () => void
