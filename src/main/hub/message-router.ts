@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import type { Message, SendMessageResult, BroadcastResult } from '../../shared/types'
 import type { AgentRegistry } from './agent-registry'
 import type { GroupManager } from './group-manager'
+import type { AgentMetrics } from './agent-metrics'
 
 const MAX_MESSAGE_SIZE = 10 * 1024
 const MAX_QUEUE_DEPTH = 100
@@ -14,7 +15,7 @@ export class MessageRouter {
   onMessageQueued?: (msg: Message) => void
   onMessageSaved?: (msg: Message) => void
 
-  constructor(private registry: AgentRegistry, private groupManager?: GroupManager) {}
+  constructor(private registry: AgentRegistry, private groupManager?: GroupManager, private metrics?: AgentMetrics) {}
 
   send(from: string, to: string, message: string, skipRateLimit = false): SendMessageResult {
     if (message.length > MAX_MESSAGE_SIZE) {
@@ -64,6 +65,9 @@ export class MessageRouter {
     // Notify listeners (main process uses these for nudging and persistence)
     this.onMessageQueued?.(msg)
     this.onMessageSaved?.(msg)
+
+    this.metrics?.increment(from, 'messagesSent')
+    this.metrics?.increment(to, 'messagesReceived')
 
     if (target.status === 'disconnected') {
       return { status: 'queued', detail: `${to} is offline, message queued` }

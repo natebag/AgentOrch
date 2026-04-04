@@ -94,6 +94,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   restartApp: () => ipcRenderer.invoke(IPC.APP_RESTART),
   submitBugReport: (title: string, body: string) => ipcRenderer.invoke(IPC.BUG_REPORT_SUBMIT, { title, body }),
+  // Usage
+  getUsageMetrics: () => ipcRenderer.invoke(IPC.USAGE_GET_METRICS),
+  refreshUsageLimits: () => ipcRenderer.invoke(IPC.USAGE_REFRESH_LIMITS),
   // Settings
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),

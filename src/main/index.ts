@@ -521,10 +521,18 @@ async function openProject(projectPath: string): Promise<void> {
   hub.pinboard.onTaskCreated = (task) => {
     pinboardStore.saveTask(task)
     mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+    hub.agentMetrics.increment(task.createdBy || 'unknown', 'tasksPosted')
   }
   hub.pinboard.onTaskUpdated = (task) => {
     pinboardStore.updateTask(task)
     mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+
+    if (task.status === 'in_progress' && task.claimedBy) {
+      hub.agentMetrics.increment(task.claimedBy, 'tasksClaimed')
+    }
+    if (task.status === 'completed' && task.claimedBy) {
+      hub.agentMetrics.increment(task.claimedBy, 'tasksCompleted')
+    }
 
     // System notification when a task is completed
     if (task.status === 'completed') {
@@ -557,6 +565,7 @@ async function openProject(projectPath: string): Promise<void> {
   hub.infoChannel.onEntryAdded = (entry) => {
     infoStore.saveEntry(entry)
     mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())
+    hub.agentMetrics.increment(entry.from, 'infoPosted')
   }
 
   hub.buddyRoom.onMessageAdded = (_msg) => {
@@ -647,6 +656,7 @@ function setupIPC(): void {
     }
 
     hub.registry.register(config)
+    hub.agentMetrics.register(config.name)
 
     // Compose skill prompts into ceoNotes
     if (config.skills && config.skills.length > 0) {
@@ -1027,6 +1037,78 @@ function setupIPC(): void {
   ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: any) => {
     saveSetting(key, value)
     return { status: 'ok' }
+  })
+
+  // Usage IPC
+  ipcMain.handle(IPC.USAGE_GET_METRICS, () => {
+    if (!hub) return []
+    const result: any[] = []
+    const allMetrics = hub.agentMetrics.getAll()
+    for (const agent of hub.registry.list()) {
+      if (agent.name === 'user') continue
+      const m = allMetrics.get(agent.name)
+      result.push({
+        agentName: agent.name,
+        cli: agent.cli,
+        model: agent.model || 'default',
+        messagesSent: m?.messagesSent ?? 0,
+        messagesReceived: m?.messagesReceived ?? 0,
+        tasksPosted: m?.tasksPosted ?? 0,
+        tasksClaimed: m?.tasksClaimed ?? 0,
+        tasksCompleted: m?.tasksCompleted ?? 0,
+        infoPosted: m?.infoPosted ?? 0,
+        spawnedAt: m?.spawnedAt ?? agent.createdAt
+      })
+    }
+    return result
+  })
+
+  ipcMain.handle(IPC.USAGE_REFRESH_LIMITS, async () => {
+    if (!hub) return []
+    const results: any[] = []
+
+    for (const [, managed] of agents) {
+      if (managed.config.cli === 'terminal') continue
+
+      const beforeCount = managed.outputBuffer.lineCount
+      writeToPty(managed, '/usage\r')
+
+      await new Promise(resolve => setTimeout(resolve, 3000))
+
+      const afterCount = managed.outputBuffer.lineCount
+      const newLineCount = afterCount - beforeCount
+      const newLines = newLineCount > 0 ? managed.outputBuffer.getLines(newLineCount) : []
+      const rawOutput = newLines.join('\n')
+
+      let providerUsage: any = undefined
+      const claudeMatch = rawOutput.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)\s*(messages?|tokens?|requests?)/i)
+      if (claudeMatch) {
+        providerUsage = {
+          used: parseInt(claudeMatch[1].replace(/,/g, '')),
+          total: parseInt(claudeMatch[2].replace(/,/g, '')),
+          unit: claudeMatch[3].toLowerCase()
+        }
+      }
+      if (!providerUsage) {
+        const pctMatch = rawOutput.match(/(\d+(?:\.\d+)?)\s*%\s*(used|remaining|left)/i)
+        if (pctMatch) {
+          const pct = parseFloat(pctMatch[1])
+          const isRemaining = pctMatch[2].toLowerCase() !== 'used'
+          providerUsage = {
+            used: isRemaining ? Math.round(100 - pct) : Math.round(pct),
+            total: 100,
+            unit: 'percent'
+          }
+        }
+      }
+      if (!providerUsage && rawOutput.trim()) {
+        providerUsage = { used: 0, total: 0, unit: 'unknown', raw: rawOutput.trim() }
+      }
+
+      results.push({ agentName: managed.config.name, providerUsage })
+    }
+
+    return results
   })
 
   // Bug report — posts directly to GitHub Issues via API (no user login needed)
