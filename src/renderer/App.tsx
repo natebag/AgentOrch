@@ -4,6 +4,7 @@ import { Workspace } from './components/Workspace'
 import { SpawnDialog } from './components/SpawnDialog'
 import { PresetDialog } from './components/PresetDialog'
 import { BugReportDialog } from './components/BugReportDialog'
+import { SettingsDialog } from './components/SettingsDialog'
 import { ProjectPickerDialog } from './components/ProjectPickerDialog'
 import { useWindowManager } from './hooks/useWindowManager'
 import { useAgents } from './hooks/useAgents'
@@ -26,6 +27,7 @@ export function App(): React.ReactElement {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
   const [showPresetDialog, setShowPresetDialog] = useState(false)
   const [showBugReport, setShowBugReport] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [project, setProject] = useState<RecentProject | null>(null)
   const [projectLoading, setProjectLoading] = useState(true)
   const [showProjectPicker, setShowProjectPicker] = useState(false)
@@ -252,6 +254,7 @@ export function App(): React.ReactElement {
             onToggleRac={toggleRac}
             onPresetsClick={() => setShowPresetDialog(true)}
             onBugReport={() => setShowBugReport(true)}
+            onSettingsClick={() => setShowSettings(true)}
             groups={groups}
             onLinkDragStart={handleTopBarLinkDragStart}
             linkDraggingFrom={linkDraggingFrom}
@@ -298,6 +301,9 @@ export function App(): React.ReactElement {
           )}
           {showBugReport && (
             <BugReportDialog onClose={() => setShowBugReport(false)} />
+          )}
+          {showSettings && (
+            <SettingsDialog onClose={() => setShowSettings(false)} />
           )}
           {showProjectPicker && (
             <ProjectPickerDialog

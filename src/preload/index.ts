@@ -93,4 +93,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   restartApp: () => ipcRenderer.invoke(IPC.APP_RESTART),
   submitBugReport: (title: string, body: string) => ipcRenderer.invoke(IPC.BUG_REPORT_SUBMIT, { title, body }),
+  // Settings
+  getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET),
+  setSetting: (key: string, value: unknown) => ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),
 })

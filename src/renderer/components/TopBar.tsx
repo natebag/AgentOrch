@@ -20,6 +20,7 @@ interface TopBarProps {
   onToggleRac: () => void
   onPresetsClick: () => void
   onBugReport: () => void
+  onSettingsClick: () => void
   groups: Array<{ id: string; color: string; members: string[] }>
   onLinkDragStart: (agentName: string, e: React.MouseEvent) => void
   linkDraggingFrom: string | null
@@ -37,7 +38,7 @@ const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap'
 })
 
-export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, buddyOpen, onToggleBuddy, filesOpen, onToggleFiles, racOpen, onToggleRac, onPresetsClick, onBugReport, groups, onLinkDragStart, linkDraggingFrom }: TopBarProps): React.ReactElement {
+export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, buddyOpen, onToggleBuddy, filesOpen, onToggleFiles, racOpen, onToggleRac, onPresetsClick, onBugReport, onSettingsClick, groups, onLinkDragStart, linkDraggingFrom }: TopBarProps): React.ReactElement {
   return (
     <div style={{
       height: '44px',
@@ -126,6 +127,16 @@ export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onA
           cursor: 'pointer',
           whiteSpace: 'nowrap'
         }}>Bug?</button>
+        <button onClick={onSettingsClick} style={{
+          height: '28px',
+          padding: '0 8px',
+          borderRadius: '5px',
+          border: '1px solid #444',
+          backgroundColor: '#2a2a2a',
+          color: '#888',
+          fontSize: '14px',
+          cursor: 'pointer',
+        }}>{'\u2699'}</button>
       </div>
     </div>
   )

@@ -112,6 +112,8 @@ export const IPC = {
   GROUP_ADD_LINK: 'group:add-link',
   GROUP_REMOVE_LINK: 'group:remove-link',
   GROUP_GET_LINKS: 'group:get-links',
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set',
 } as const
 
 export interface BuddyMessage {

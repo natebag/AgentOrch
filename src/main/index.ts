@@ -39,6 +39,25 @@ function getVisibleAgents() {
   return hub.registry.list().filter(a => a.name !== 'user')
 }
 
+function getSettingsPath(): string {
+  return path.join(app.getPath('userData'), 'settings.json')
+}
+
+function loadSettings(): Record<string, any> {
+  try {
+    if (fs.existsSync(getSettingsPath())) {
+      return JSON.parse(fs.readFileSync(getSettingsPath(), 'utf-8'))
+    }
+  } catch { /* corrupt */ }
+  return {}
+}
+
+function saveSetting(key: string, value: any): void {
+  const settings = loadSettings()
+  settings[key] = value
+  fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
+}
+
 function saveLinkState(): void {
   if (!projectManager?.currentProject || !hub) return
   const linksPath = path.join(projectManager.currentProject.path, '.agentorch', 'links.json')
@@ -431,23 +450,29 @@ async function openProject(projectPath: string): Promise<void> {
 
     // System notification when a task is completed
     if (task.status === 'completed') {
-      const notification = new Notification({
-        title: 'Task Completed',
-        body: `"${task.title}" completed${task.claimedBy ? ` by ${task.claimedBy}` : ''}`,
-        icon: undefined
-      })
-      notification.show()
+      const settings = loadSettings()
+      if (settings.notifications !== false) { // enabled by default
+        const notification = new Notification({
+          title: 'Task Completed',
+          body: `"${task.title}" completed${task.claimedBy ? ` by ${task.claimedBy}` : ''}`,
+          icon: undefined
+        })
+        notification.show()
+      }
 
       // Check if ALL tasks are done
       const allTasks = hub.pinboard.readTasks()
       const openTasks = allTasks.filter(t => t.status !== 'completed')
       if (allTasks.length > 0 && openTasks.length === 0) {
-        const allDone = new Notification({
-          title: 'All Tasks Complete!',
-          body: `All ${allTasks.length} tasks on the pinboard are done.`,
-          icon: undefined
-        })
-        allDone.show()
+        const settings = loadSettings()
+        if (settings.notifyAllDone !== false) {
+          const allDone = new Notification({
+            title: 'All Tasks Complete!',
+            body: `All ${allTasks.length} tasks on the pinboard are done.`,
+            icon: undefined
+          })
+          allDone.show()
+        }
       }
     }
   }
@@ -902,6 +927,13 @@ function setupIPC(): void {
     await closeProject()
     app.relaunch()
     app.exit(0)
+  })
+
+  // Settings IPC
+  ipcMain.handle(IPC.SETTINGS_GET, () => loadSettings())
+  ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: any) => {
+    saveSetting(key, value)
+    return { status: 'ok' }
   })
 
   // Bug report — posts directly to GitHub Issues via API (no user login needed)
