@@ -24,7 +24,8 @@ export function createRoutes(
   const router = Router()
 
   router.get('/agents', (_req: Request, res: Response) => {
-    const agents = registry.list().map(({ ceoNotes, ...rest }) => ({
+    // Filter out the virtual "user" agent — it's internal for R.A.C. message routing
+    const agents = registry.list().filter(a => a.name !== 'user').map(({ ceoNotes, ...rest }) => ({
       ...rest,
       healthy: registry.isHealthy(rest.name)
     }))

@@ -34,6 +34,11 @@ const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter 
 const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
 const PROMPT_INJECT_FALLBACK_MS = 30000 // Safety net if StatusDetector doesn't detect prompt
 
+// Get visible agent list — filters out internal agents like "user"
+function getVisibleAgents() {
+  return hub.registry.list().filter(a => a.name !== 'user')
+}
+
 function getMcpServerPath(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'mcp-server', 'index.js')
@@ -187,7 +192,7 @@ function reconnectAgent(config: AgentConfig): void {
     onExit: (exitCode) => {
       hub.registry.updateStatus(config.name, 'disconnected')
       mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
-      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
       if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
 
       if (!manualKills.has(config.id) && config.cli !== 'terminal') {
@@ -205,7 +210,7 @@ function reconnectAgent(config: AgentConfig): void {
     },
     onStatusChange: (status) => {
       hub.registry.updateStatus(config.name, status)
-      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
 
       // Status-driven prompt injection: inject when CLI first reaches prompt
       if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
@@ -227,7 +232,7 @@ function reconnectAgent(config: AgentConfig): void {
   })
 
   agents.set(config.id, managed)
-  mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+  mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
 
   const cmds = buildCliLaunchCommands(config, mcpConfigPath, mcpServerPath, hub.port, hub.secret)
   if (cmds) {
@@ -466,7 +471,7 @@ function setupIPC(): void {
   }))
 
   ipcMain.handle(IPC.GET_AGENTS, () => {
-    return hub.registry.list()
+    return getVisibleAgents()
   })
 
   ipcMain.handle(IPC.SPAWN_AGENT, (_event, config: AgentConfig) => {
@@ -523,7 +528,7 @@ function setupIPC(): void {
       onExit: (exitCode) => {
         hub.registry.updateStatus(config.name, 'disconnected')
         mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
-        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
         if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
 
         // Auto-reconnect: if this wasn't a manual kill, respawn after a delay
@@ -542,7 +547,7 @@ function setupIPC(): void {
       },
       onStatusChange: (status) => {
         hub.registry.updateStatus(config.name, status)
-        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
 
         // Status-driven prompt injection: inject when CLI first reaches prompt
         if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
@@ -564,7 +569,7 @@ function setupIPC(): void {
     })
 
     agents.set(config.id, managed)
-    mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+    mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
 
     // Launch agent CLI after shell initializes (plain terminals skip this)
     // Some CLIs need multiple commands (e.g., codex needs `mcp add` first)
@@ -612,7 +617,7 @@ function setupIPC(): void {
       initialPrompts.delete(agentId)
       hasReceivedInitialPrompt.delete(agentId)
       agents.delete(agentId)
-      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
     }
   })
 
@@ -779,7 +784,7 @@ function setupIPC(): void {
       const session = await racClient.rent(slotId, renterName, hub.port, hub.secret)
       // Notify renderer that agents changed (bridge will register on the hub)
       setTimeout(() => {
-        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
       }, 2000) // Give bridge time to register
       return session
     } catch (err: any) {
@@ -792,7 +797,7 @@ function setupIPC(): void {
       await racClient.release(sessionId)
       // Agent will be unregistered from hub by R.A.C. bridge
       setTimeout(() => {
-        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, hub.registry.list())
+        mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
       }, 1000)
       return { status: 'ok' }
     } catch (err: any) {
