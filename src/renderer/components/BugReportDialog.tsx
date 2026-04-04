@@ -58,7 +58,7 @@ export function BugReportDialog({ onClose }: { onClose: () => void }): React.Rea
     // Try API first (no login needed), fall back to browser
     const result = await electronAPI.submitBugReport(title, body)
     if (result.success) {
-      setSubmitResult(`Bug #${result.issueUrl?.split('/').pop()} submitted!`)
+      setSubmitResult('Bug report submitted! We\'ll look into it.')
       setTimeout(onClose, 2000)
     } else if (result.method === 'browser') {
       // No token — fall back to browser (user needs GitHub login)
@@ -159,7 +159,7 @@ export function BugReportDialog({ onClose }: { onClose: () => void }): React.Rea
         </div>
 
         <div style={{ fontSize: '10px', color: '#555', textAlign: 'center' }}>
-          No login required — submitted directly to the AgentOrch issue tracker
+          Your report helps us improve AgentOrch. Thank you!
         </div>
       </div>
     </div>
