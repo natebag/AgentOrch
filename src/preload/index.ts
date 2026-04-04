@@ -86,4 +86,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.UPDATE_AVAILABLE, handler)
     return () => ipcRenderer.removeListener(IPC.UPDATE_AVAILABLE, handler)
   },
+  restartApp: () => ipcRenderer.invoke(IPC.APP_RESTART),
 })

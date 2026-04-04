@@ -826,6 +826,12 @@ function setupIPC(): void {
   ipcMain.handle(IPC.UPDATE_PERFORM, async () => {
     return await updateChecker.performUpdate()
   })
+
+  ipcMain.handle(IPC.APP_RESTART, async () => {
+    await closeProject()
+    app.relaunch()
+    app.exit(0)
+  })
 }
 
 async function main(): Promise<void> {

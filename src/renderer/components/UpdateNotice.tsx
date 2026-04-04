@@ -12,22 +12,25 @@ declare const electronAPI: {
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void
   checkForUpdate: () => Promise<UpdateInfo | null>
   performUpdate: () => Promise<{ success: boolean; error?: string }>
+  restartApp: () => void
 }
+
+type Phase = 'notify' | 'confirm' | 'updating' | 'done' | 'failed'
 
 export function UpdateNotice(): React.ReactElement | null {
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
-  const [updating, setUpdating] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
+  const [phase, setPhase] = useState<Phase>('notify')
+  const [errorMsg, setErrorMsg] = useState('')
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     const unsub = electronAPI.onUpdateAvailable((info: UpdateInfo) => {
       if (info.available) {
         setUpdate(info)
+        setPhase('notify')
         setDismissed(false)
       }
     })
-    // Also check on mount
     electronAPI.checkForUpdate().then(info => {
       if (info?.available) {
         setUpdate(info)
@@ -36,16 +39,15 @@ export function UpdateNotice(): React.ReactElement | null {
     return unsub
   }, [])
 
-  const handleUpdate = async () => {
-    setUpdating(true)
-    setResult(null)
+  const handleConfirmUpdate = async () => {
+    setPhase('updating')
     const res = await electronAPI.performUpdate()
     if (res.success) {
-      setResult('Updated! Restart AgentOrch to apply.')
+      setPhase('done')
     } else {
-      setResult(`Failed: ${res.error}`)
+      setErrorMsg(res.error || 'Unknown error')
+      setPhase('failed')
     }
-    setUpdating(false)
   }
 
   if (!update || !update.available || dismissed) return null
@@ -60,7 +62,7 @@ export function UpdateNotice(): React.ReactElement | null {
       borderRadius: '8px',
       padding: '10px 14px',
       zIndex: 99999,
-      maxWidth: '340px',
+      maxWidth: '360px',
       fontSize: '12px',
       color: '#e0e0e0',
       boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
@@ -72,25 +74,78 @@ export function UpdateNotice(): React.ReactElement | null {
         }}>x</button>
       </div>
       <div style={{ color: '#aaa', fontSize: '11px', marginBottom: '4px' }}>
-        {update.currentSha} &rarr; {update.remoteSha}
+        {update.currentSha} {'\u2192'} {update.remoteSha}
       </div>
       <div style={{ color: '#ccc', fontSize: '11px', marginBottom: '8px' }}>
         {update.message}
       </div>
-      {result ? (
-        <div style={{ fontSize: '11px', color: result.startsWith('Updated') ? '#4caf50' : '#f44336' }}>
-          {result}
-        </div>
-      ) : (
+
+      {/* Phase: Initial notification */}
+      {phase === 'notify' && (
         <div style={{ display: 'flex', gap: '6px' }}>
-          <button onClick={handleUpdate} disabled={updating} style={{
+          <button onClick={() => setPhase('confirm')} style={{
             padding: '4px 12px', backgroundColor: '#2d5a2d', border: '1px solid #4caf50',
             borderRadius: '4px', color: '#4caf50', cursor: 'pointer', fontSize: '11px'
-          }}>{updating ? 'Updating...' : 'Update Now'}</button>
+          }}>Update Now</button>
           <button onClick={() => setDismissed(true)} style={{
             padding: '4px 12px', backgroundColor: 'transparent', border: '1px solid #444',
             borderRadius: '4px', color: '#888', cursor: 'pointer', fontSize: '11px'
           }}>Later</button>
+        </div>
+      )}
+
+      {/* Phase: Confirmation warning */}
+      {phase === 'confirm' && (
+        <div>
+          <div style={{
+            padding: '6px 8px', backgroundColor: '#3a2a1a', border: '1px solid #d0a85c',
+            borderRadius: '4px', marginBottom: '8px', fontSize: '11px', color: '#ffc107'
+          }}>
+            AgentOrch will restart after updating. All running agents will be stopped. Save any work before proceeding.
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button onClick={handleConfirmUpdate} style={{
+              padding: '4px 12px', backgroundColor: '#5a2d2d', border: '1px solid #f44336',
+              borderRadius: '4px', color: '#f44336', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold'
+            }}>Update + Restart</button>
+            <button onClick={() => setPhase('notify')} style={{
+              padding: '4px 12px', backgroundColor: 'transparent', border: '1px solid #444',
+              borderRadius: '4px', color: '#888', cursor: 'pointer', fontSize: '11px'
+            }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Phase: Updating */}
+      {phase === 'updating' && (
+        <div style={{ fontSize: '11px', color: '#ffc107' }}>
+          Updating... pulling latest code and installing dependencies.
+        </div>
+      )}
+
+      {/* Phase: Done — restart button */}
+      {phase === 'done' && (
+        <div>
+          <div style={{ fontSize: '11px', color: '#4caf50', marginBottom: '6px' }}>
+            Update complete. Restart to apply.
+          </div>
+          <button onClick={() => electronAPI.restartApp()} style={{
+            padding: '4px 12px', backgroundColor: '#2d5a2d', border: '1px solid #4caf50',
+            borderRadius: '4px', color: '#4caf50', cursor: 'pointer', fontSize: '11px'
+          }}>Restart Now</button>
+        </div>
+      )}
+
+      {/* Phase: Failed */}
+      {phase === 'failed' && (
+        <div>
+          <div style={{ fontSize: '11px', color: '#f44336', marginBottom: '6px' }}>
+            Update failed: {errorMsg}
+          </div>
+          <button onClick={() => setPhase('notify')} style={{
+            padding: '4px 12px', backgroundColor: 'transparent', border: '1px solid #444',
+            borderRadius: '4px', color: '#888', cursor: 'pointer', fontSize: '11px'
+          }}>OK</button>
         </div>
       )}
     </div>

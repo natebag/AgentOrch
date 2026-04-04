@@ -103,6 +103,7 @@ export const IPC = {
   UPDATE_CHECK: 'update:check',
   UPDATE_AVAILABLE: 'update:available',
   UPDATE_PERFORM: 'update:perform',
+  APP_RESTART: 'app:restart',
 } as const
 
 export interface BuddyMessage {
