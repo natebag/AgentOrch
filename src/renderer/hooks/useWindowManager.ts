@@ -37,24 +37,20 @@ export function useWindowManager() {
 
   const updateWindowPosition = useCallback((id: string, x: number, y: number) => {
     setWindows(prev => {
+      const win = prev.get(id)
+      if (!win) return prev
       const next = new Map(prev)
-      const win = next.get(id)
-      if (win) {
-        win.x = x
-        win.y = y
-      }
+      next.set(id, { ...win, x, y })
       return next
     })
   }, [])
 
   const updateWindowSize = useCallback((id: string, width: number, height: number) => {
     setWindows(prev => {
+      const win = prev.get(id)
+      if (!win) return prev
       const next = new Map(prev)
-      const win = next.get(id)
-      if (win) {
-        win.width = width
-        win.height = height
-      }
+      next.set(id, { ...win, width, height })
       return next
     })
   }, [])
@@ -129,30 +125,30 @@ export function useWindowManager() {
 
   const focusWindow = useCallback((id: string) => {
     setWindows(prev => {
+      const win = prev.get(id)
+      if (!win) return prev
       const next = new Map(prev)
-      const win = next.get(id)
-      if (win) {
-        win.zIndex = ++nextZ
-        win.minimized = false
-      }
+      next.set(id, { ...win, zIndex: ++nextZ, minimized: false })
       return next
     })
   }, [])
 
   const minimizeWindow = useCallback((id: string) => {
     setWindows(prev => {
+      const win = prev.get(id)
+      if (!win) return prev
       const next = new Map(prev)
-      const win = next.get(id)
-      if (win) win.minimized = true
+      next.set(id, { ...win, minimized: true })
       return next
     })
   }, [])
 
   const updateStatusColor = useCallback((id: string, color: string) => {
     setWindows(prev => {
+      const win = prev.get(id)
+      if (!win) return prev
       const next = new Map(prev)
-      const win = next.get(id)
-      if (win) win.statusColor = color
+      next.set(id, { ...win, statusColor: color })
       return next
     })
   }, [])

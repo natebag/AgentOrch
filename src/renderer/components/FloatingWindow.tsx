@@ -185,9 +185,9 @@ export function FloatingWindow({
         <div className="window-titlebar" style={titleBarStyle} onDoubleClick={onMaximize}>
           {statusColor && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: statusColor, marginRight: 8 }} />}
           <span style={{ flex: 1, fontSize: '12px', color: '#ccc' }}>{title}</span>
-          <button onClick={onMinimize} style={btnStyle}>─</button>
-          <button onClick={onMaximize} style={btnStyle}>❐</button>
-          <button onClick={onClose} style={{ ...btnStyle, color: '#e55' }}>✕</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onMinimize} style={btnStyle}>─</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onMaximize} style={btnStyle}>❐</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onClose} style={{ ...btnStyle, color: '#e55' }}>✕</button>
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>
       </div>,
@@ -214,9 +214,9 @@ export function FloatingWindow({
         <div className="window-titlebar" style={titleBarStyle} onDoubleClick={onMaximize}>
           {statusColor && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: statusColor, marginRight: 8 }} />}
           <span style={{ flex: 1, fontSize: '12px', color: '#ccc' }}>{title}</span>
-          <button onClick={onMinimize} style={btnStyle}>─</button>
-          <button onClick={onMaximize} style={btnStyle}>□</button>
-          <button onClick={onClose} style={{ ...btnStyle, color: '#e55' }}>✕</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onMinimize} style={btnStyle}>─</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onMaximize} style={btnStyle}>□</button>
+          <button onMouseDown={e => e.stopPropagation()} onClick={onClose} style={{ ...btnStyle, color: '#e55' }}>✕</button>
         </div>
         {isAgent && onLinkDragStart && (
           <div
