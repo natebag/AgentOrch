@@ -68,8 +68,6 @@ export function FloatingWindow({
 }: FloatingWindowProps): React.ReactElement | null {
   const [dragSizeOverride, setDragSizeOverride] = useState<{ width: number; height: number } | null>(null)
 
-  if (minimized) return null
-
   // Rnd lives inside the CSS-transformed canvas. Positions are in canvas space.
   // CSS scale(zoom) handles visual scaling. No manual * zoom needed.
   const displayWidth = dragSizeOverride?.width ?? width
@@ -173,6 +171,9 @@ export function FloatingWindow({
       parseInt(ref.style.height)
     )
   }, [onResizeStop, onSnapPreviewChange])
+
+  // Minimized: hide but keep hooks alive (React requires consistent hook count)
+  if (minimized) return null
 
   // Maximized: render via portal into viewport (outside canvas transform)
   if (maximized && viewportRef?.current) {
