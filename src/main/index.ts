@@ -32,7 +32,7 @@ const manualKills = new Set<string>() // Track intentional kills to skip auto-re
 const pendingNudges = new Map<string, string[]>() // agentName → queued nudge strings
 const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter is sent
 const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
-const PROMPT_INJECT_FALLBACK_MS = 30000 // Safety net if StatusDetector doesn't detect prompt
+const PROMPT_INJECT_FALLBACK_MS = 10000 // Safety net if StatusDetector doesn't detect prompt (Gemini, Kimi, etc.)
 
 // Get visible agent list — filters out internal agents like "user"
 function getVisibleAgents() {
