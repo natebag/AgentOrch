@@ -81,6 +81,10 @@ export function App(): React.ReactElement {
     focusWindow(agentId)
   }, [focusWindow])
 
+  const handleClearContext = useCallback(async (agentId: string) => {
+    await window.electronAPI.clearAgentContext(agentId)
+  }, [])
+
   const togglePinboard = useCallback(() => {
     if (pinboardOpen) {
       removeWindow(PINBOARD_ID)
@@ -153,6 +157,20 @@ export function App(): React.ReactElement {
       setLinks(newLinks)
     }
   }, [])
+
+  const handleDisconnectAgent = useCallback(async (agentName: string) => {
+    const currentLinks = await window.electronAPI.getLinks()
+    for (const link of currentLinks) {
+      if (link.from === agentName || link.to === agentName) {
+        await handleRemoveLink(link.from, link.to)
+      }
+    }
+  }, [handleRemoveLink])
+
+  const handleKillFromMenu = useCallback(async (agentId: string) => {
+    await killAgent(agentId)
+    removeWindow(agentId)
+  }, [killAgent, removeWindow])
 
   const handleTopBarLinkDragStart = useCallback((agentName: string, e: React.MouseEvent) => {
     setLinkDraggingFrom(agentName)
@@ -252,6 +270,9 @@ export function App(): React.ReactElement {
             agents={agents}
             onSpawnClick={() => setShowSpawnDialog(true)}
             onAgentClick={handleAgentPillClick}
+            onClearContext={handleClearContext}
+            onDisconnectAgent={handleDisconnectAgent}
+            onKillAgent={handleKillFromMenu}
             pinboardOpen={pinboardOpen}
             onTogglePinboard={togglePinboard}
             infoOpen={infoOpen}
