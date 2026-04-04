@@ -65,6 +65,12 @@ function TaskCard({ task }: { task: PinboardTask }) {
   )
 }
 
+declare const electronAPI: {
+  getPinboardTasks: () => Promise<PinboardTask[]>
+  onPinboardUpdate: (cb: (tasks: PinboardTask[]) => void) => () => void
+  getHubInfo: () => Promise<{ port: number; secret: string }>
+}
+
 export function PinboardPanel() {
   const [tasks, setTasks] = useState<PinboardTask[]>([])
 
@@ -73,6 +79,21 @@ export function PinboardPanel() {
     const cleanup = window.electronAPI.onPinboardUpdate(setTasks)
     return cleanup
   }, [])
+
+  const completedCount = tasks.filter(t => t.status === 'completed').length
+
+  const handleClearCompleted = async () => {
+    try {
+      const hubInfo = await electronAPI.getHubInfo()
+      await fetch(`http://127.0.0.1:${hubInfo.port}/pinboard/clear-completed`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${hubInfo.secret}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      const updated = await window.electronAPI.getPinboardTasks()
+      setTasks(updated)
+    } catch { /* failed */ }
+  }
 
   if (tasks.length === 0) {
     return (
@@ -128,6 +149,16 @@ export function PinboardPanel() {
             }}>
               {grouped[col.key].length}
             </span>
+            {col.key === 'completed' && completedCount > 0 && (
+              <button
+                onClick={handleClearCompleted}
+                title="Clear all completed tasks"
+                style={{
+                  background: 'none', border: '1px solid #444', borderRadius: '4px',
+                  color: '#888', fontSize: '10px', cursor: 'pointer', padding: '1px 6px'
+                }}
+              >Clear</button>
+            )}
           </div>
 
           <div style={{
