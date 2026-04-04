@@ -20,6 +20,9 @@ interface TopBarProps {
   onToggleRac: () => void
   onPresetsClick: () => void
   onBugReport: () => void
+  groups: Array<{ id: string; color: string; members: string[] }>
+  onLinkDragStart: (agentName: string, e: React.MouseEvent) => void
+  linkDraggingFrom: string | null
 }
 
 const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
@@ -34,7 +37,7 @@ const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
   whiteSpace: 'nowrap'
 })
 
-export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, buddyOpen, onToggleBuddy, filesOpen, onToggleFiles, racOpen, onToggleRac, onPresetsClick, onBugReport }: TopBarProps): React.ReactElement {
+export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onAgentClick, pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo, buddyOpen, onToggleBuddy, filesOpen, onToggleFiles, racOpen, onToggleRac, onPresetsClick, onBugReport, groups, onLinkDragStart, linkDraggingFrom }: TopBarProps): React.ReactElement {
   return (
     <div style={{
       height: '44px',
@@ -95,6 +98,9 @@ export function TopBar({ projectName, onSwitchProject, agents, onSpawnClick, onA
           key={agent.id}
           agent={agent}
           onClick={() => onAgentClick(agent.id)}
+          groupColor={groups.find(g => g.members.includes(agent.name))?.color}
+          onLinkDragStart={(e) => onLinkDragStart(agent.name, e)}
+          isLinkTarget={linkDraggingFrom !== null && linkDraggingFrom !== agent.name}
         />
       ))}
       {agents.length === 0 && (

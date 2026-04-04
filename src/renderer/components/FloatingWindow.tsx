@@ -224,11 +224,10 @@ export function FloatingWindow({
             title="Drag to link with another agent"
             style={{
               position: 'absolute',
-              right: -5,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: 12,
-              height: 12,
+              right: 8,
+              top: 8,
+              width: 10,
+              height: 10,
               borderRadius: '50%',
               backgroundColor: groupColor || '#666',
               border: '2px solid #333',
@@ -236,8 +235,8 @@ export function FloatingWindow({
               zIndex: 10,
               transition: 'transform 0.15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-50%) scale(1.4)')}
-            onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(-50%)')}
+            onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
           />
         )}
         <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>

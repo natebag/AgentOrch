@@ -31,6 +31,7 @@ export function App(): React.ReactElement {
   const [showProjectPicker, setShowProjectPicker] = useState(false)
   const [links, setLinks] = useState<Array<{ from: string; to: string }>>([])
   const [groups, setGroups] = useState<AgentGroup[]>([])
+  const [linkDraggingFrom, setLinkDraggingFrom] = useState<string | null>(null)
   const {
     windows, zoom, pan,
     addWindow, removeWindow, focusWindow, minimizeWindow,
@@ -141,6 +142,25 @@ export function App(): React.ReactElement {
     }
   }, [])
 
+  const handleTopBarLinkDragStart = useCallback((agentName: string, e: React.MouseEvent) => {
+    setLinkDraggingFrom(agentName)
+
+    const handleUp = (ev: MouseEvent) => {
+      setLinkDraggingFrom(null)
+      // Find what agent pill we dropped on
+      const target = document.elementFromPoint(ev.clientX, ev.clientY)
+      const pillEl = target?.closest('[data-agent-name]') as HTMLElement | null
+      if (pillEl) {
+        const targetName = pillEl.getAttribute('data-agent-name')
+        if (targetName && targetName !== agentName) {
+          handleAddLink(agentName, targetName)
+        }
+      }
+    }
+
+    window.addEventListener('mouseup', handleUp, { once: true })
+  }, [handleAddLink])
+
   // Keyboard shortcuts: Ctrl+1..9 to focus windows, Ctrl+Tab to cycle
   useEffect(() => {
     let currentFocusIdx = 0
@@ -232,6 +252,9 @@ export function App(): React.ReactElement {
             onToggleRac={toggleRac}
             onPresetsClick={() => setShowPresetDialog(true)}
             onBugReport={() => setShowBugReport(true)}
+            groups={groups}
+            onLinkDragStart={handleTopBarLinkDragStart}
+            linkDraggingFrom={linkDraggingFrom}
           />
           <Workspace
             windows={windows}
