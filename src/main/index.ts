@@ -1015,7 +1015,10 @@ function setupIPC(): void {
 
   ipcMain.handle(IPC.APP_RESTART, async () => {
     await closeProject()
-    app.relaunch()
+    if (app.isPackaged) {
+      app.relaunch()
+    }
+    // In dev mode, just quit — user re-runs npm run dev
     app.exit(0)
   })
 
