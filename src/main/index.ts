@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, Menu, shell } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
 import { createDatabase } from './db/database'
@@ -113,6 +113,84 @@ function createWindow(): BrowserWindow {
       _event.preventDefault()
     }
   })
+
+  // Custom app menu
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'File',
+      submenu: [
+        { label: 'Switch Project', click: () => win.webContents.send(IPC.PROJECT_CHANGED, null) },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Getting Started',
+          click: () => shell.openExternal('https://github.com/natebag/AgentOrch#readme')
+        },
+        {
+          label: 'Keyboard Shortcuts',
+          click: () => {
+            dialog.showMessageBox(win, {
+              type: 'info',
+              title: 'Keyboard Shortcuts',
+              message: 'AgentOrch Shortcuts',
+              detail: [
+                'Ctrl+1-9  — Focus window by number',
+                'Ctrl+Tab  — Cycle windows',
+                'Ctrl+0    — Reset zoom',
+                'Ctrl+S    — Save file (in editor)',
+                'Ctrl+Shift+0 — Fit all windows',
+              ].join('\n')
+            })
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Report a Bug',
+          click: () => win.webContents.send('menu:bug-report')
+        },
+        { type: 'separator' },
+        {
+          label: 'About AgentOrch',
+          click: () => {
+            dialog.showMessageBox(win, {
+              type: 'info',
+              title: 'About AgentOrch',
+              message: 'AgentOrch',
+              detail: 'AI-Native Agent Orchestration IDE\n\nOrchestrate teams of AI coding agents across multiple models and providers.\n\nhttps://github.com/natebag/AgentOrch'
+            })
+          }
+        }
+      ]
+    }
+  ])
+  Menu.setApplicationMenu(menu)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
