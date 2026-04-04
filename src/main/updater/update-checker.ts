@@ -1,7 +1,7 @@
 import { execSync } from 'child_process'
 
 const REPO_API = 'https://api.github.com/repos/natebag/AgentOrch/commits/main'
-const CHECK_INTERVAL_MS = 30 * 60 * 1000 // Check every 30 minutes
+const CHECK_INTERVAL_MS = 2 * 60 * 1000 // Check every 2 minutes
 
 export interface UpdateInfo {
   available: boolean
