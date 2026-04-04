@@ -102,4 +102,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings
   getSettings: () => ipcRenderer.invoke(IPC.SETTINGS_GET),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),
+  // Git
+  gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
+  gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),
+  gitDiff: (file: string, staged: boolean) => ipcRenderer.invoke(IPC.GIT_DIFF, file, staged),
+  gitStage: (file: string) => ipcRenderer.invoke(IPC.GIT_STAGE, file),
+  gitUnstage: (file: string) => ipcRenderer.invoke(IPC.GIT_UNSTAGE, file),
+  gitCommit: (message: string) => ipcRenderer.invoke(IPC.GIT_COMMIT, message),
+  gitPush: () => ipcRenderer.invoke(IPC.GIT_PUSH),
+  gitPull: () => ipcRenderer.invoke(IPC.GIT_PULL),
+  gitBranches: () => ipcRenderer.invoke(IPC.GIT_BRANCHES),
+  gitCheckout: (branch: string) => ipcRenderer.invoke(IPC.GIT_CHECKOUT, branch),
+  gitNewBranch: (name: string) => ipcRenderer.invoke(IPC.GIT_NEW_BRANCH, name),
 })

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Notification, Menu, shell } from 'electron'
 import path from 'path'
 import * as fs from 'fs'
+import * as gitOps from './git/git-ops'
 import { createDatabase } from './db/database'
 import { MessageStore } from './db/message-store'
 import { PinboardStore } from './db/pinboard-store'
@@ -1120,6 +1121,69 @@ function setupIPC(): void {
     }
 
     return results
+  })
+
+  // Git IPC
+  ipcMain.handle(IPC.GIT_STATUS, () => {
+    if (!projectManager?.currentProject) return { isRepo: false, branch: '', ahead: 0, behind: 0, staged: [], unstaged: [] }
+    return gitOps.getStatus(projectManager.currentProject.path)
+  })
+
+  ipcMain.handle(IPC.GIT_LOG, (_event, count?: number) => {
+    if (!projectManager?.currentProject) return []
+    return gitOps.getLog(projectManager.currentProject.path, count)
+  })
+
+  ipcMain.handle(IPC.GIT_DIFF, (_event, file: string, staged: boolean) => {
+    if (!projectManager?.currentProject) return ''
+    return gitOps.getDiff(projectManager.currentProject.path, file, staged)
+  })
+
+  ipcMain.handle(IPC.GIT_STAGE, (_event, file: string) => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { gitOps.stageFile(projectManager.currentProject.path, file); return { status: 'ok' } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_UNSTAGE, (_event, file: string) => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { gitOps.unstageFile(projectManager.currentProject.path, file); return { status: 'ok' } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_COMMIT, (_event, message: string) => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { const out = gitOps.commit(projectManager.currentProject.path, message); return { status: 'ok', output: out } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_PUSH, async () => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { const out = gitOps.push(projectManager.currentProject.path); return { status: 'ok', output: out } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_PULL, async () => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { const out = gitOps.pull(projectManager.currentProject.path); return { status: 'ok', output: out } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_BRANCHES, () => {
+    if (!projectManager?.currentProject) return { current: '', branches: [] }
+    return gitOps.getBranches(projectManager.currentProject.path)
+  })
+
+  ipcMain.handle(IPC.GIT_CHECKOUT, (_event, branch: string) => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { gitOps.checkout(projectManager.currentProject.path, branch); return { status: 'ok' } }
+    catch (e: any) { return { error: e.message } }
+  })
+
+  ipcMain.handle(IPC.GIT_NEW_BRANCH, (_event, name: string) => {
+    if (!projectManager?.currentProject) return { error: 'No project' }
+    try { gitOps.createBranch(projectManager.currentProject.path, name); return { status: 'ok' } }
+    catch (e: any) { return { error: e.message } }
   })
 
   // Bug report — posts directly to GitHub Issues via API (no user login needed)
