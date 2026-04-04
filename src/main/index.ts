@@ -562,6 +562,10 @@ async function openProject(projectPath: string): Promise<void> {
       }
     }
   }
+  hub.pinboard.onTaskDeleted = (taskId) => {
+    pinboardStore.deleteTask(taskId)
+    mainWindow?.webContents.send(IPC.PINBOARD_TASK_UPDATE, hub.pinboard.readTasks())
+  }
   hub.infoChannel.onEntryAdded = (entry) => {
     infoStore.saveEntry(entry)
     mainWindow?.webContents.send(IPC.INFO_ENTRY_ADDED, hub.infoChannel.readInfo())

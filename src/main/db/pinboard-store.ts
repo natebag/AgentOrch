@@ -4,6 +4,7 @@ import type { PinboardTask } from '../hub/pinboard'
 export class PinboardStore {
   private insertStmt: Database.Statement
   private updateStmt: Database.Statement
+  private deleteStmt: Database.Statement
   private loadStmt: Database.Statement
 
   constructor(private db: Database.Database) {
@@ -13,6 +14,9 @@ export class PinboardStore {
     )
     this.updateStmt = db.prepare(
       `UPDATE pinboard_tasks SET status = ?, claimed_by = ?, result = ? WHERE id = ?`
+    )
+    this.deleteStmt = db.prepare(
+      `DELETE FROM pinboard_tasks WHERE id = ?`
     )
     this.loadStmt = db.prepare(
       `SELECT id, title, description, priority, status, created_by AS createdBy, claimed_by AS claimedBy, result, created_at AS createdAt
@@ -29,6 +33,10 @@ export class PinboardStore {
 
   updateTask(task: PinboardTask): void {
     this.updateStmt.run(task.status, task.claimedBy, task.result, task.id)
+  }
+
+  deleteTask(id: string): void {
+    this.deleteStmt.run(id)
   }
 
   loadTasks(): PinboardTask[] {

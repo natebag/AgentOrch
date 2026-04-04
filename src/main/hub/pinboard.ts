@@ -17,6 +17,7 @@ export class Pinboard {
   private tasks = new Map<string, PinboardTask>()
   onTaskCreated?: (task: PinboardTask) => void
   onTaskUpdated?: (task: PinboardTask) => void
+  onTaskDeleted?: (taskId: string) => void
 
   postTask(title: string, description: string, priority: 'low' | 'medium' | 'high' = 'medium', createdBy?: string, groupId?: string): PinboardTask {
     const task: PinboardTask = {
@@ -109,6 +110,7 @@ export class Pinboard {
     for (const [id, task] of this.tasks) {
       if (task.status === 'completed') {
         this.tasks.delete(id)
+        this.onTaskDeleted?.(id)
         cleared++
       }
     }
