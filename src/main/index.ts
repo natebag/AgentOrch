@@ -31,6 +31,9 @@ const hasReceivedInitialPrompt = new Set<string>()
 const initialPrompts = new Map<string, string>()
 const manualKills = new Set<string>() // Track intentional kills to skip auto-reconnect
 const pendingNudges = new Map<string, string[]>() // agentName → queued nudge strings
+const lastNudgeDelivery = new Map<string, number>() // agentName → timestamp of last nudge delivery
+const nudgeFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>() // agentName → fallback timer
+const NUDGE_COOLDOWN_MS = 15000   // Minimum interval between nudge deliveries to the same agent
 const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter is sent
 const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
 const PROMPT_INJECT_FALLBACK_MS = 10000 // Safety net if StatusDetector doesn't detect prompt (Gemini, Kimi, etc.)
@@ -388,8 +391,21 @@ function deliverNudge(agentName: string, nudge: string): void {
   const agent = hub.registry.get(agentName)
   if (!agent || agent.status === 'disconnected') return
 
+  // Cooldown: skip if we recently delivered a nudge to this agent.
+  // This prevents infinite loops where Gemini/TUI CLIs re-trigger nudges
+  // via status flickers caused by processing the previous nudge.
+  const lastDelivery = lastNudgeDelivery.get(agentName) ?? 0
+  const now = Date.now()
+  if (now - lastDelivery < NUDGE_COOLDOWN_MS) {
+    // Still in cooldown — queue but don't set another fallback timer
+    if (!pendingNudges.has(agentName)) pendingNudges.set(agentName, [])
+    pendingNudges.get(agentName)!.push(nudge)
+    return
+  }
+
   if (agent.status === 'active') {
     // Agent is at prompt — deliver immediately
+    lastNudgeDelivery.set(agentName, now)
     writeNudgeToPty(managed, nudge)
   } else {
     // Agent might be working or status detection doesn't work for this CLI.
@@ -397,16 +413,23 @@ function deliverNudge(agentName: string, nudge: string): void {
     if (!pendingNudges.has(agentName)) pendingNudges.set(agentName, [])
     pendingNudges.get(agentName)!.push(nudge)
 
+    // Cancel any existing fallback timer for this agent to avoid double delivery
+    const existingTimer = nudgeFallbackTimers.get(agentName)
+    if (existingTimer) clearTimeout(existingTimer)
+
     // Fallback: deliver after delay even if 'active' is never detected
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      nudgeFallbackTimers.delete(agentName)
       const queued = pendingNudges.get(agentName)
       if (queued && queued.length > 0) {
         const latest = queued[queued.length - 1]
         pendingNudges.delete(agentName)
+        lastNudgeDelivery.set(agentName, Date.now())
         const m = Array.from(agents.values()).find(a => a.config.name === agentName)
         if (m) writeNudgeToPty(m, latest)
       }
     }, NUDGE_FALLBACK_DELAY)
+    nudgeFallbackTimers.set(agentName, timer)
   }
 }
 
@@ -429,10 +452,26 @@ function flushPendingNudges(agentName: string): void {
   const queued = pendingNudges.get(agentName)
   if (!queued || queued.length === 0) return
 
+  // Cooldown check: don't flush if we recently delivered a nudge.
+  // Prevents loops where status flickers to 'active' during nudge processing.
+  const lastDelivery = lastNudgeDelivery.get(agentName) ?? 0
+  if (Date.now() - lastDelivery < NUDGE_COOLDOWN_MS) return
+
+  // Cancel fallback timer since we're delivering now
+  const existingTimer = nudgeFallbackTimers.get(agentName)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    nudgeFallbackTimers.delete(agentName)
+  }
+
   // Deliver the most recent nudge only — stacking old nudges wastes context
   const latest = queued[queued.length - 1]
   pendingNudges.delete(agentName)
-  deliverNudge(agentName, latest)
+  lastNudgeDelivery.set(agentName, Date.now())
+
+  // Write directly to PTY instead of calling deliverNudge() to avoid re-queueing
+  const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
+  if (managed) writeNudgeToPty(managed, latest)
 }
 
 // When a message is queued for an agent, nudge them to call get_messages().
@@ -614,6 +653,9 @@ async function closeProject(): Promise<void> {
   initialPrompts.clear()
   hasReceivedInitialPrompt.clear()
   pendingNudges.clear()
+  lastNudgeDelivery.clear()
+  for (const timer of nudgeFallbackTimers.values()) clearTimeout(timer)
+  nudgeFallbackTimers.clear()
 
   // Close hub
   hub?.close()
@@ -793,6 +835,12 @@ function setupIPC(): void {
       hub.registry.remove(managed.config.name)
       hub.messages.clearAgent(managed.config.name)
       pendingNudges.delete(managed.config.name)
+      lastNudgeDelivery.delete(managed.config.name)
+      const fallbackTimer = nudgeFallbackTimers.get(managed.config.name)
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer)
+        nudgeFallbackTimers.delete(managed.config.name)
+      }
       if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
       initialPrompts.delete(agentId)
       hasReceivedInitialPrompt.delete(agentId)
