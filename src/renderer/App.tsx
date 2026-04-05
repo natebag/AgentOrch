@@ -357,6 +357,7 @@ export function App(): React.ReactElement {
               updateWindowPosition(id, x, y)
               updateWindowSize(id, w, h)
             }}
+            activeTabId={activeTabId}
           />
           {showSpawnDialog && (
             <SpawnDialog
@@ -397,9 +398,10 @@ export function App(): React.ReactElement {
                     addWindowAt(panelId, wp.agentName, wp.x, wp.y, wp.width, wp.height)
                   }
                 }
-                // Spawn agents with saved positions
+                // Spawn agents with saved positions, scoped to current tab
                 configs.forEach(async (config) => {
-                  const agentId = await spawnAgent(config)
+                  const configWithTab = { ...config, tabId: activeTabId }
+                  const agentId = await spawnAgent(configWithTab)
                   const title = `${config.name} (${config.cli})`
                   const pos = posMap.get(title)
                   if (pos) {

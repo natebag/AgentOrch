@@ -31,14 +31,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.AGENT_STATE_UPDATE, handler)
     return () => ipcRenderer.removeListener(IPC.AGENT_STATE_UPDATE, handler)
   },
-  getPinboardTasks: () => ipcRenderer.invoke(IPC.PINBOARD_GET_TASKS),
+  getPinboardTasks: (tabId?: string) => ipcRenderer.invoke(IPC.PINBOARD_GET_TASKS, tabId),
   clearCompletedTasks: () => ipcRenderer.invoke(IPC.PINBOARD_CLEAR_COMPLETED),
   onPinboardUpdate: (callback: (tasks: unknown[]) => void) => {
     const handler = (_event: unknown, tasks: unknown[]) => callback(tasks)
     ipcRenderer.on(IPC.PINBOARD_TASK_UPDATE, handler)
     return () => ipcRenderer.removeListener(IPC.PINBOARD_TASK_UPDATE, handler)
   },
-  getInfoEntries: () => ipcRenderer.invoke(IPC.INFO_GET_ENTRIES),
+  getInfoEntries: (tabId?: string) => ipcRenderer.invoke(IPC.INFO_GET_ENTRIES, tabId),
   onInfoUpdate: (callback: (entries: unknown[]) => void) => {
     const handler = (_event: unknown, entries: unknown[]) => callback(entries)
     ipcRenderer.on(IPC.INFO_ENTRY_ADDED, handler)

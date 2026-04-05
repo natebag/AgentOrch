@@ -15,9 +15,9 @@ declare global {
       loadPreset: (name: string) => Promise<WorkspacePreset>
       listPresets: () => Promise<string[]>
       deletePreset: (name: string) => Promise<{ status: string }>
-      getPinboardTasks: () => Promise<PinboardTask[]>
+      getPinboardTasks: (tabId?: string) => Promise<PinboardTask[]>
       onPinboardUpdate: (callback: (tasks: PinboardTask[]) => void) => () => void
-      getInfoEntries: () => Promise<InfoEntry[]>
+      getInfoEntries: (tabId?: string) => Promise<InfoEntry[]>
       onInfoUpdate: (callback: (entries: InfoEntry[]) => void) => () => void
       onPtyOutput: (callback: (agentId: string, data: string) => void) => () => void
       onPtyExit: (callback: (agentId: string, exitCode: number | undefined) => void) => () => void

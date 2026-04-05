@@ -99,7 +99,7 @@ function sortNewestFirst(entries: InfoEntry[]): InfoEntry[] {
   return [...entries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
-export function InfoChannelPanel(): React.ReactElement {
+export function InfoChannelPanel({ tabId }: { tabId?: string }): React.ReactElement {
   const [entries, setEntries] = useState<InfoEntry[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -107,7 +107,7 @@ export function InfoChannelPanel(): React.ReactElement {
     let isMounted = true
 
     const loadEntries = async () => {
-      const nextEntries = await window.electronAPI.getInfoEntries()
+      const nextEntries = await window.electronAPI.getInfoEntries(tabId)
       if (isMounted) {
         setEntries(sortNewestFirst(nextEntries))
       }
@@ -116,7 +116,11 @@ export function InfoChannelPanel(): React.ReactElement {
     void loadEntries()
 
     const cleanup = window.electronAPI.onInfoUpdate((updatedEntries) => {
-      setEntries(sortNewestFirst(updatedEntries))
+      // Filter push updates by tab
+      const filtered = tabId
+        ? updatedEntries.filter(e => !e.tabId || e.tabId === tabId)
+        : updatedEntries
+      setEntries(sortNewestFirst(filtered))
       if (scrollRef.current) {
         scrollRef.current.scrollTop = 0
       }
@@ -126,7 +130,7 @@ export function InfoChannelPanel(): React.ReactElement {
       isMounted = false
       cleanup()
     }
-  }, [])
+  }, [tabId])
 
   const renderedEntries = useMemo(() => sortNewestFirst(entries), [entries])
 

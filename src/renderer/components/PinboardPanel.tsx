@@ -66,26 +66,33 @@ function TaskCard({ task }: { task: PinboardTask }) {
 }
 
 declare const electronAPI: {
-  getPinboardTasks: () => Promise<PinboardTask[]>
+  getPinboardTasks: (tabId?: string) => Promise<PinboardTask[]>
   clearCompletedTasks: () => Promise<{ status: string; cleared: number }>
   onPinboardUpdate: (cb: (tasks: PinboardTask[]) => void) => () => void
 }
 
-export function PinboardPanel() {
+export function PinboardPanel({ tabId }: { tabId?: string }) {
   const [tasks, setTasks] = useState<PinboardTask[]>([])
 
   useEffect(() => {
-    window.electronAPI.getPinboardTasks().then(setTasks)
-    const cleanup = window.electronAPI.onPinboardUpdate(setTasks)
+    window.electronAPI.getPinboardTasks(tabId).then(setTasks)
+    const cleanup = window.electronAPI.onPinboardUpdate((allTasks) => {
+      // Filter push updates by tab
+      if (tabId) {
+        setTasks(allTasks.filter(t => !t.tabId || t.tabId === tabId))
+      } else {
+        setTasks(allTasks)
+      }
+    })
     return cleanup
-  }, [])
+  }, [tabId])
 
   const completedCount = tasks.filter(t => t.status === 'completed').length
 
   const handleClearCompleted = async () => {
     try {
       await window.electronAPI.clearCompletedTasks()
-      const updated = await window.electronAPI.getPinboardTasks()
+      const updated = await window.electronAPI.getPinboardTasks(tabId)
       setTasks(updated)
     } catch { /* failed */ }
   }

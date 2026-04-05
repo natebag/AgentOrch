@@ -259,15 +259,14 @@ function buildReconnectPrompt(config: AgentConfig): string {
 
 function injectPrompt(managed: ManagedPty, prompt: string, delayMs: number): void {
   setTimeout(() => {
-    // TUI-based CLIs (Codex, Gemini) need text and Enter sent separately
-    // Their TUI must render the input text before Enter triggers submit
-    if (managed.config.cli === 'codex' || managed.config.cli === 'gemini') {
-      writeToPty(managed, prompt)
-      setTimeout(() => writeToPty(managed, '\r'), CODEX_SUBMIT_DELAY)
-      return
-    }
-
-    writeToPty(managed, prompt + '\r')
+    // All TUI-based CLIs need text and Enter sent separately.
+    // Sending both in a single write can cause the Enter to be dropped
+    // when the TUI is still rendering the input text.
+    writeToPty(managed, prompt)
+    const submitDelay = (managed.config.cli === 'codex' || managed.config.cli === 'gemini')
+      ? CODEX_SUBMIT_DELAY
+      : 500
+    setTimeout(() => writeToPty(managed, '\r'), submitDelay)
   }, delayMs)
 }
 
@@ -890,8 +889,8 @@ function setupIPC(): void {
   })
 
   // Pinboard IPC handlers
-  ipcMain.handle(IPC.PINBOARD_GET_TASKS, () => {
-    return hub.pinboard.readTasks()
+  ipcMain.handle(IPC.PINBOARD_GET_TASKS, (_event, tabId?: string) => {
+    return tabId ? hub.pinboard.readTasksForTab(tabId) : hub.pinboard.readTasks()
   })
 
   ipcMain.handle(IPC.PINBOARD_CLEAR_COMPLETED, () => {
@@ -900,8 +899,8 @@ function setupIPC(): void {
   })
 
   // Info Channel IPC handlers
-  ipcMain.handle(IPC.INFO_GET_ENTRIES, () => {
-    return hub.infoChannel.readInfo()
+  ipcMain.handle(IPC.INFO_GET_ENTRIES, (_event, tabId?: string) => {
+    return tabId ? hub.infoChannel.readInfoForTab(tabId) : hub.infoChannel.readInfo()
   })
 
   // Buddy Room IPC handlers

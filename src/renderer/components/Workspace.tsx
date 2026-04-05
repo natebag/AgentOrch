@@ -50,6 +50,7 @@ interface WorkspaceProps {
   onCloseWindow: (id: string) => void
   onDragStop: (id: string, x: number, y: number) => void
   onResizeStop: (id: string, x: number, y: number, width: number, height: number) => void
+  activeTabId?: string
 }
 
 export function Workspace({
@@ -68,7 +69,8 @@ export function Workspace({
   onMinimizeWindow,
   onCloseWindow,
   onDragStop,
-  onResizeStop
+  onResizeStop,
+  activeTabId
 }: WorkspaceProps): React.ReactElement {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [isPanning, setIsPanning] = useState(false)
@@ -319,9 +321,9 @@ export function Workspace({
 
           let content: React.ReactNode
           if (panelType === 'pinboard') {
-            content = <PinboardPanel />
+            content = <PinboardPanel tabId={activeTabId} />
           } else if (panelType === 'info') {
-            content = <InfoChannelPanel />
+            content = <InfoChannelPanel tabId={activeTabId} />
           } else if (panelType === 'buddy') {
             content = <BuddyRoomPanel />
           } else if (panelType === 'files') {
