@@ -336,7 +336,7 @@ export function App(): React.ReactElement {
               pan={pan}
               onLoadPreset={(configs, savedWindows, savedCanvas) => {
                 setShowPresetDialog(false)
-                // Build a lookup of saved positions by agent name
+                // Build a lookup of saved positions by window title
                 const posMap = new Map<string, WindowPosition>()
                 for (const wp of savedWindows) {
                   posMap.set(wp.agentName, wp)
@@ -345,6 +345,21 @@ export function App(): React.ReactElement {
                 if (savedCanvas) {
                   setZoom(savedCanvas.zoom)
                   setPan(savedCanvas.panX, savedCanvas.panY)
+                }
+                // Restore panel windows from saved positions
+                const panelTitleToId: Record<string, string> = {
+                  'Pinboard': PINBOARD_ID,
+                  'Info Channel': INFO_ID,
+                  'Buddy Room': BUDDY_ID,
+                  'Files': FILES_ID,
+                  'R.A.C.': RAC_ID,
+                  'Usage': USAGE_ID,
+                }
+                for (const wp of savedWindows) {
+                  const panelId = panelTitleToId[wp.agentName]
+                  if (panelId) {
+                    addWindowAt(panelId, wp.agentName, wp.x, wp.y, wp.width, wp.height)
+                  }
                 }
                 // Spawn agents with saved positions
                 configs.forEach(async (config) => {
