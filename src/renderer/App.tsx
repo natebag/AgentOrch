@@ -10,7 +10,7 @@ import { useWindowManager } from './hooks/useWindowManager'
 import { useAgents } from './hooks/useAgents'
 import { UpdateNotice } from './components/UpdateNotice'
 import { WhatsNewDialog } from './components/WhatsNewDialog'
-import type { AgentConfig, AgentGroup, RecentProject } from '../shared/types'
+import type { AgentConfig, AgentGroup, RecentProject, WindowPosition, CanvasState } from '../shared/types'
 
 declare const electronAPI: {
   getProject: () => Promise<RecentProject | null>
@@ -334,9 +334,28 @@ export function App(): React.ReactElement {
               windows={windows}
               zoom={zoom}
               pan={pan}
-              onLoadAgents={(configs) => {
+              onLoadAgents={async (configs, windowPositions, canvas) => {
                 setShowPresetDialog(false)
-                configs.forEach(config => handleSpawn(config))
+                const spawnedIds: { id: string; title: string }[] = []
+                for (const config of configs) {
+                  const agentId = await spawnAgent(config)
+                  const title = `${config.name} (${config.cli})`
+                  addWindow(agentId, title, getStatusColor('idle'))
+                  spawnedIds.push({ id: agentId, title })
+                }
+                if (windowPositions && windowPositions.length > 0) {
+                  for (const pos of windowPositions) {
+                    const match = spawnedIds.find(s => s.title === pos.agentName)
+                    if (match) {
+                      updateWindowPosition(match.id, pos.x, pos.y)
+                      updateWindowSize(match.id, pos.width, pos.height)
+                    }
+                  }
+                }
+                if (canvas) {
+                  setZoom(canvas.zoom)
+                  setPan(canvas.panX, canvas.panY)
+                }
               }}
               onClose={() => setShowPresetDialog(false)}
             />

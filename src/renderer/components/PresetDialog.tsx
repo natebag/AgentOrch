@@ -7,7 +7,7 @@ interface PresetDialogProps {
   windows: WindowState[]
   zoom: number
   pan: { x: number; y: number }
-  onLoadAgents: (configs: Omit<AgentConfig, 'id'>[]) => void
+  onLoadAgents: (configs: Omit<AgentConfig, 'id'>[], windowPositions?: WindowPosition[], canvas?: CanvasState) => void
   onClose: () => void
 }
 
@@ -599,6 +599,8 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
       setError(null)
 
       let configs: Omit<AgentConfig, 'id'>[]
+      let windowPositions: WindowPosition[] | undefined
+      let canvas: CanvasState | undefined
 
       if (templateToLoad && activeTab === 'templates') {
         // Loading from built-in template
@@ -613,11 +615,13 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
           ...rest,
           cwd: cwdOverride.trim() || rest.cwd
         }))
+        windowPositions = preset.windows
+        canvas = preset.canvas
       } else {
         return
       }
 
-      onLoadAgents(configs)
+      onLoadAgents(configs, windowPositions, canvas)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
