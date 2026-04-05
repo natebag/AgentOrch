@@ -115,6 +115,24 @@ export function useWindowManager() {
     })
   }, []) // stable — uses refs, no zoom/pan in deps
 
+  const addWindowAt = useCallback((id: string, title: string, x: number, y: number, width: number, height: number, statusColor?: string) => {
+    setWindows(prev => {
+      const next = new Map(prev)
+      next.set(id, {
+        id,
+        title,
+        statusColor,
+        x,
+        y,
+        width,
+        height,
+        zIndex: ++nextZ,
+        minimized: false
+      })
+      return next
+    })
+  }, [])
+
   const removeWindow = useCallback((id: string) => {
     setWindows(prev => {
       const next = new Map(prev)
@@ -160,6 +178,7 @@ export function useWindowManager() {
     setZoom,
     setPan,
     addWindow,
+    addWindowAt,
     removeWindow,
     focusWindow,
     minimizeWindow,

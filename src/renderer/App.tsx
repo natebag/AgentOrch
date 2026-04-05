@@ -39,7 +39,7 @@ export function App(): React.ReactElement {
   const [linkDraggingFrom, setLinkDraggingFrom] = useState<string | null>(null)
   const {
     windows, zoom, pan,
-    addWindow, removeWindow, focusWindow, minimizeWindow,
+    addWindow, addWindowAt, removeWindow, focusWindow, minimizeWindow,
     setZoom, setPan, updateWindowPosition, updateWindowSize, zoomToFit
   } = useWindowManager()
   const { agents, spawnAgent, killAgent, getStatusColor } = useAgents()
@@ -334,28 +334,29 @@ export function App(): React.ReactElement {
               windows={windows}
               zoom={zoom}
               pan={pan}
-              onLoadAgents={async (configs, windowPositions, canvas) => {
+              onLoadPreset={(configs, savedWindows, savedCanvas) => {
                 setShowPresetDialog(false)
-                const spawnedIds: { id: string; title: string }[] = []
-                for (const config of configs) {
+                // Build a lookup of saved positions by agent name
+                const posMap = new Map<string, WindowPosition>()
+                for (const wp of savedWindows) {
+                  posMap.set(wp.agentName, wp)
+                }
+                // Restore canvas state
+                if (savedCanvas) {
+                  setZoom(savedCanvas.zoom)
+                  setPan(savedCanvas.panX, savedCanvas.panY)
+                }
+                // Spawn agents with saved positions
+                configs.forEach(async (config) => {
                   const agentId = await spawnAgent(config)
                   const title = `${config.name} (${config.cli})`
-                  addWindow(agentId, title, getStatusColor('idle'))
-                  spawnedIds.push({ id: agentId, title })
-                }
-                if (windowPositions && windowPositions.length > 0) {
-                  for (const pos of windowPositions) {
-                    const match = spawnedIds.find(s => s.title === pos.agentName)
-                    if (match) {
-                      updateWindowPosition(match.id, pos.x, pos.y)
-                      updateWindowSize(match.id, pos.width, pos.height)
-                    }
+                  const pos = posMap.get(title)
+                  if (pos) {
+                    addWindowAt(agentId, title, pos.x, pos.y, pos.width, pos.height, getStatusColor('idle'))
+                  } else {
+                    addWindow(agentId, title, getStatusColor('idle'))
                   }
-                }
-                if (canvas) {
-                  setZoom(canvas.zoom)
-                  setPan(canvas.panX, canvas.panY)
-                }
+                })
               }}
               onClose={() => setShowPresetDialog(false)}
             />

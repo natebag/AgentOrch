@@ -7,7 +7,7 @@ interface PresetDialogProps {
   windows: WindowState[]
   zoom: number
   pan: { x: number; y: number }
-  onLoadAgents: (configs: Omit<AgentConfig, 'id'>[], windowPositions?: WindowPosition[], canvas?: CanvasState) => void
+  onLoadPreset: (configs: Omit<AgentConfig, 'id'>[], windows: WindowPosition[], canvas: CanvasState) => void
   onClose: () => void
 }
 
@@ -414,7 +414,7 @@ const CLI_LABELS: Record<string, string> = {
   openclaude: 'OpenClaude',
 }
 
-export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose }: PresetDialogProps): React.ReactElement {
+export function PresetDialog({ agents, windows, zoom, pan, onLoadPreset, onClose }: PresetDialogProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<Tab>('save')
   const [presetName, setPresetName] = useState('')
   const [presets, setPresets] = useState<PresetInfo[]>([])
@@ -593,35 +593,79 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
     setShowCwdPrompt(true)
   }
 
+  const handleUpdatePreset = async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setLoading(true)
+      setError(null)
+
+      const windowPositions: WindowPosition[] = windows.map(w => ({
+        agentName: w.title,
+        x: w.x,
+        y: w.y,
+        width: w.width,
+        height: w.height
+      }))
+
+      const canvas: CanvasState = {
+        zoom,
+        panX: pan.x,
+        panY: pan.y
+      }
+
+      const agentConfigs: AgentConfig[] = agents.map(a => ({
+        id: a.id,
+        name: a.name,
+        cli: a.cli,
+        cwd: a.cwd,
+        role: a.role,
+        ceoNotes: a.ceoNotes,
+        shell: a.shell,
+        admin: a.admin,
+        autoMode: a.autoMode,
+        promptRegex: a.promptRegex,
+        model: a.model,
+        experimental: a.experimental
+      }))
+
+      await window.electronAPI.savePreset(name, agentConfigs, windowPositions, canvas)
+      await loadPresetsList()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update preset')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleConfirmLoad = async () => {
     try {
       setLoading(true)
       setError(null)
 
       let configs: Omit<AgentConfig, 'id'>[]
-      let windowPositions: WindowPosition[] | undefined
-      let canvas: CanvasState | undefined
+      let savedWindows: WindowPosition[] = []
+      let savedCanvas: CanvasState = { zoom: 1, panX: 0, panY: 0 }
 
       if (templateToLoad && activeTab === 'templates') {
-        // Loading from built-in template
+        // Loading from built-in template — no saved positions
         configs = templateToLoad.agents.map(agent => ({
           ...agent,
           cwd: cwdOverride.trim() || ''
         }))
       } else if (selectedPreset) {
-        // Loading from saved preset
+        // Loading from saved preset — include window positions and canvas
         const preset = await window.electronAPI.loadPreset(selectedPreset)
         configs = preset.agents.map(({ id, ...rest }) => ({
           ...rest,
           cwd: cwdOverride.trim() || rest.cwd
         }))
-        windowPositions = preset.windows
-        canvas = preset.canvas
+        savedWindows = preset.windows || []
+        savedCanvas = preset.canvas || savedCanvas
       } else {
         return
       }
 
-      onLoadAgents(configs, windowPositions, canvas)
+      onLoadPreset(configs, savedWindows, savedCanvas)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load')
@@ -854,6 +898,13 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadAgents, onClose
                       <div style={{ fontSize: '11px', color: '#666' }}>{formatDate(preset.savedAt)}</div>
                     </div>
                     <button
+                      onClick={e => handleUpdatePreset(preset.name, e)}
+                      style={updateBtnStyle}
+                      title="Update preset with current layout"
+                    >
+                      &#8635;
+                    </button>
+                    <button
                       onClick={e => handleEditPreset(preset.name, e)}
                       style={editBtnStyle}
                       title="Edit preset"
@@ -1081,6 +1132,20 @@ const selectedPresetItemStyle: React.CSSProperties = {
   border: '1px solid #4caf50',
   borderRadius: '4px',
   cursor: 'pointer'
+}
+
+const updateBtnStyle: React.CSSProperties = {
+  width: '24px',
+  height: '24px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+  border: 'none',
+  color: '#666',
+  fontSize: '16px',
+  cursor: 'pointer',
+  borderRadius: '4px'
 }
 
 const editBtnStyle: React.CSSProperties = {
