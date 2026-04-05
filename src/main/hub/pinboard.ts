@@ -54,7 +54,7 @@ export class Pinboard {
     return this.readTasks().filter(t => !t.groupId || t.groupId === groupId)
   }
 
-  claimTask(taskId: string, agentName: string): { status: string; detail: string } {
+  claimTask(taskId: string, agentName: string): { status: string; detail: string; task?: PinboardTask } {
     const task = this.tasks.get(taskId)
     if (!task) {
       return { status: 'error', detail: `Task '${taskId}' not found` }
@@ -68,7 +68,7 @@ export class Pinboard {
     task.claimedBy = agentName
     task.status = 'in_progress'
     this.onTaskUpdated?.(task)
-    return { status: 'ok', detail: `Task claimed by '${agentName}'` }
+    return { status: 'ok', detail: `Task claimed by '${agentName}'`, task }
   }
 
   completeTask(taskId: string, agentName: string, result?: string): { status: string; detail: string } {

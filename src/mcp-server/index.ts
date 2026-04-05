@@ -239,6 +239,13 @@ server.tool(
         body: JSON.stringify({ from: AGENT_NAME })
       })
       if (result.status === 'error') return toolError(result.detail || 'Claim failed')
+      // Include task details so the agent knows exactly what to work on
+      if (result.task) {
+        return toolResult({
+          ...result,
+          instruction: `You have claimed this task. NOW work on it immediately: "${result.task.title}" — ${result.task.description}`
+        })
+      }
       return toolResult(result)
     } catch (err: any) {
       return toolError(`Failed to claim task: ${err.message}`)
