@@ -1,5 +1,27 @@
 import type { AgentConfig } from '../shared/types'
 
+/**
+ * Build a shell command that removes ALL agentorch-* MCP registrations
+ * for a given CLI tool. Prevents stale registrations from accumulating
+ * when agent names change between sessions.
+ */
+function buildMcpCleanupCmd(
+  cli: 'codex' | 'gemini',
+  shell: AgentConfig['shell']
+): string {
+  if (shell === 'cmd') {
+    return `for /f "tokens=1" %i in ('${cli} mcp list 2^>nul ^| findstr /B "agentorch"') do @${cli} mcp remove %i 2>nul`
+  }
+  if (shell === 'powershell') {
+    return `${cli} mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { ${cli} mcp remove ($_ -split '\\s+')[0] 2>$null }`
+  }
+  if (shell === 'fish') {
+    return `${cli} mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; ${cli} mcp remove $name 2>/dev/null; end`
+  }
+  // bash, zsh
+  return `${cli} mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; do ${cli} mcp remove "$name" 2>/dev/null; done`
+}
+
 export function buildCliLaunchCommands(
   config: AgentConfig,
   mcpConfigPath: string,
@@ -27,9 +49,8 @@ export function buildCliLaunchCommands(
 
   if (cliBase === 'codex') {
     const mcpName = `agentorch-${config.name.replace(/\s+/g, '-')}`
-    const nullDev = config.shell === 'cmd' ? 'nul' : '$null'
     const cmds = [
-      `codex mcp remove ${mcpName} 2>${nullDev}`,
+      buildMcpCleanupCmd('codex', config.shell),
       `codex mcp add ${mcpName} -- node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
     ]
     let codexCmd = 'codex'
@@ -48,9 +69,8 @@ export function buildCliLaunchCommands(
 
   if (cliBase === 'gemini') {
     const mcpName = `agentorch-${config.name.replace(/\s+/g, '-')}`
-    const nullDev = config.shell === 'cmd' ? 'nul' : '$null'
     const cmds = [
-      `gemini mcp remove ${mcpName} 2>${nullDev}`,
+      buildMcpCleanupCmd('gemini', config.shell),
       `gemini mcp add ${mcpName} node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
     ]
     let geminiCmd = 'gemini'

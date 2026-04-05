@@ -28,7 +28,7 @@ describe('buildCliLaunchCommands', () => {
     ])
   })
 
-  it('launches Gemini with MCP registration and model flags', () => {
+  it('launches Gemini with full MCP cleanup and model flags', () => {
     expect(buildCliLaunchCommands(
       makeConfig({ cli: 'gemini', model: 'gemini-2.5-pro', autoMode: true }),
       'C:\\temp\\agentorch-mcp.json',
@@ -36,9 +36,49 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )).toEqual([
-      'gemini mcp remove agentorch 2>$null; gemini mcp add agentorch node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
+      "gemini mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { gemini mcp remove ($_ -split '\\s+')[0] 2>$null }",
+      'gemini mcp add agentorch-worker-1 node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
       'gemini --model gemini-2.5-pro --yolo'
     ])
+  })
+
+  it('launches Codex with full MCP cleanup and model flags', () => {
+    expect(buildCliLaunchCommands(
+      makeConfig({ cli: 'codex', model: 'o3', autoMode: true }),
+      'C:\\temp\\agentorch-mcp.json',
+      'C:\\temp\\mcp-server.js',
+      7777,
+      'secret'
+    )).toEqual([
+      "codex mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { codex mcp remove ($_ -split '\\s+')[0] 2>$null }",
+      'codex mcp add agentorch-worker-1 -- node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
+      'codex -m o3 --yolo'
+    ])
+  })
+
+  it('generates cmd-compatible cleanup for cmd shell', () => {
+    const cmds = buildCliLaunchCommands(
+      makeConfig({ cli: 'codex', shell: 'cmd', autoMode: false }),
+      'C:\\temp\\agentorch-mcp.json',
+      'C:\\temp\\mcp-server.js',
+      7777,
+      'secret'
+    )!
+    expect(cmds[0]).toContain('findstr /B "agentorch"')
+    expect(cmds[0]).toContain('codex mcp remove %i')
+  })
+
+  it('generates bash-compatible cleanup for bash shell', () => {
+    const cmds = buildCliLaunchCommands(
+      makeConfig({ cli: 'gemini', shell: 'bash', autoMode: false }),
+      '/tmp/agentorch-mcp.json',
+      '/tmp/mcp-server.js',
+      7777,
+      'secret'
+    )!
+    expect(cmds[0]).toContain('grep')
+    expect(cmds[0]).toContain('while read name; do')
+    expect(cmds[0]).toContain('2>/dev/null')
   })
 
   it('launches Copilot with session-scoped MCP config and allow-all mode', () => {
