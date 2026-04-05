@@ -16,6 +16,7 @@ export interface AgentConfig {
   experimental?: boolean
   skills?: string[]  // skill IDs attached to this agent
   groupId?: string
+  tabId?: string  // workspace tab this agent belongs to
 }
 
 export interface AgentState extends AgentConfig {
@@ -30,6 +31,7 @@ export interface Message {
   message: string
   timestamp: string
   groupId?: string
+  tabId?: string
 }
 
 export interface SendMessageResult {
@@ -60,6 +62,7 @@ export interface PinboardTask {
   createdAt: string
   groupId?: string
   targetRole?: string
+  tabId?: string
 }
 
 export const IPC = {
@@ -131,6 +134,10 @@ export const IPC = {
   GIT_BRANCHES: 'git:branches',
   GIT_CHECKOUT: 'git:checkout',
   GIT_NEW_BRANCH: 'git:new-branch',
+  TAB_GET_ALL: 'tab:get-all',
+  TAB_CREATE: 'tab:create',
+  TAB_CLOSE: 'tab:close',
+  TAB_RENAME: 'tab:rename',
 } as const
 
 export interface BuddyMessage {
@@ -161,6 +168,11 @@ export interface AgentGroup {
 export interface LinkState {
   links: Array<{ from: string; to: string }>
   groups: AgentGroup[]
+}
+
+export interface WorkspaceTab {
+  id: string
+  name: string
 }
 
 export interface AgentMetricsData {
@@ -230,6 +242,7 @@ export interface InfoEntry {
   tags: string[]
   createdAt: string
   groupId?: string
+  tabId?: string
 }
 
 export interface RecentProject {
