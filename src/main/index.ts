@@ -36,7 +36,10 @@ workspaceTabs.set('tab-default', { id: 'tab-default', name: 'Workspace 1' })
 let nextTabNum = 2
 const lastNudgeDelivery = new Map<string, number>() // agentName → timestamp of last nudge delivery
 const nudgeFallbackTimers = new Map<string, ReturnType<typeof setTimeout>>() // agentName → fallback timer
-const NUDGE_COOLDOWN_MS = 15000   // Minimum interval between nudge deliveries to the same agent
+const NUDGE_COOLDOWN_MS = 3000    // Minimum interval between nudge deliveries to the same agent
+const STALE_TASK_CHECK_INTERVAL = 60000  // Check for stuck in_progress tasks every 60s
+const STALE_TASK_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes before a task is considered stale
+let staleTaskTimer: ReturnType<typeof setInterval> | null = null
 const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter is sent
 const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
 const PROMPT_INJECT_FALLBACK_MS = 10000 // Safety net if StatusDetector doesn't detect prompt (Gemini, Kimi, etc.)
@@ -395,15 +398,24 @@ function deliverNudge(agentName: string, nudge: string): void {
   const agent = hub.registry.get(agentName)
   if (!agent || agent.status === 'disconnected') return
 
-  // Cooldown: skip if we recently delivered a nudge to this agent.
+  // Cooldown: skip immediate delivery if we recently delivered a nudge to this agent.
   // This prevents infinite loops where Gemini/TUI CLIs re-trigger nudges
   // via status flickers caused by processing the previous nudge.
   const lastDelivery = lastNudgeDelivery.get(agentName) ?? 0
   const now = Date.now()
   if (now - lastDelivery < NUDGE_COOLDOWN_MS) {
-    // Still in cooldown — queue but don't set another fallback timer
+    // Still in cooldown — queue and ensure a fallback timer will deliver it
     if (!pendingNudges.has(agentName)) pendingNudges.set(agentName, [])
     pendingNudges.get(agentName)!.push(nudge)
+    // Set a fallback timer if one doesn't exist — ensures delivery after cooldown expires
+    if (!nudgeFallbackTimers.has(agentName)) {
+      const remainingCooldown = NUDGE_COOLDOWN_MS - (now - lastDelivery)
+      const timer = setTimeout(() => {
+        nudgeFallbackTimers.delete(agentName)
+        flushPendingNudges(agentName)
+      }, remainingCooldown + 500) // Small buffer after cooldown expires
+      nudgeFallbackTimers.set(agentName, timer)
+    }
     return
   }
 
@@ -424,14 +436,8 @@ function deliverNudge(agentName: string, nudge: string): void {
     // Fallback: deliver after delay even if 'active' is never detected
     const timer = setTimeout(() => {
       nudgeFallbackTimers.delete(agentName)
-      const queued = pendingNudges.get(agentName)
-      if (queued && queued.length > 0) {
-        const latest = queued[queued.length - 1]
-        pendingNudges.delete(agentName)
-        lastNudgeDelivery.set(agentName, Date.now())
-        const m = Array.from(agents.values()).find(a => a.config.name === agentName)
-        if (m) writeNudgeToPty(m, latest)
-      }
+      // Use flushPendingNudges for consistent dedup/combine behavior
+      flushPendingNudges(agentName)
     }, NUDGE_FALLBACK_DELAY)
     nudgeFallbackTimers.set(agentName, timer)
   }
@@ -464,14 +470,22 @@ function flushPendingNudges(agentName: string): void {
     nudgeFallbackTimers.delete(agentName)
   }
 
-  // Deliver the most recent nudge only — stacking old nudges wastes context
-  const latest = queued[queued.length - 1]
+  // Deduplicate and combine queued nudges — deliver unique task IDs so no tasks are missed
+  const unique = [...new Set(queued)]
   pendingNudges.delete(agentName)
   lastNudgeDelivery.set(agentName, Date.now())
 
   // Write directly to PTY instead of calling deliverNudge() to avoid re-queueing
   const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
-  if (managed) writeNudgeToPty(managed, latest)
+  if (!managed) return
+
+  if (unique.length === 1) {
+    writeNudgeToPty(managed, unique[0])
+  } else {
+    // Combine multiple nudges into a single message to avoid flooding
+    const combined = `[AgentOrch] You have ${unique.length} pending notifications. Call read_tasks() and get_messages() now to check for work.`
+    writeNudgeToPty(managed, combined)
+  }
 }
 
 // When a message is queued for an agent, nudge them to call get_messages().
@@ -523,6 +537,42 @@ function setupInfoNudge(): void {
       deliverNudge(orchestrator.name, nudge)
     }
   }
+}
+
+// Periodically check for tasks stuck in in_progress and nudge orchestrators about them.
+// This catches cases where a worker completed work but forgot to call complete_task(),
+// or where a worker became unresponsive with a claimed task.
+function setupStaleTaskWatchdog(): void {
+  if (staleTaskTimer) clearInterval(staleTaskTimer)
+  staleTaskTimer = setInterval(() => {
+    const tasks = hub.pinboard.readTasks()
+    const now = Date.now()
+    const staleTasks = tasks.filter(t => {
+      if (t.status !== 'in_progress') return false
+      const age = now - new Date(t.createdAt).getTime()
+      return age > STALE_TASK_THRESHOLD_MS
+    })
+    if (staleTasks.length === 0) return
+
+    // Nudge orchestrators about stale tasks
+    const orchestrators = hub.registry.list().filter(a => a.role === 'orchestrator' && a.status !== 'disconnected')
+    for (const orch of orchestrators) {
+      const taskList = staleTasks.map(t => `"${t.title}" claimed by ${t.claimedBy || 'unknown'}`).join(', ')
+      const nudge = `[AgentOrch] STALE TASK ALERT: ${staleTasks.length} task(s) stuck in_progress for over 5 minutes: ${taskList}. Check on these agents — they may need a nudge via send_message, or the task may need to be abandoned with abandon_task.`
+      deliverNudge(orch.name, nudge)
+    }
+
+    // Also nudge the stuck workers themselves
+    for (const task of staleTasks) {
+      if (task.claimedBy) {
+        const worker = hub.registry.get(task.claimedBy)
+        if (worker && worker.status !== 'disconnected') {
+          const nudge = `[AgentOrch] REMINDER: You claimed task "${task.title}" (id: ${task.id}) but haven't completed it. If you're done, call complete_task now. If you're stuck, call abandon_task to release it.`
+          deliverNudge(task.claimedBy, nudge)
+        }
+      }
+    }
+  }, STALE_TASK_CHECK_INTERVAL)
 }
 
 async function openProject(projectPath: string): Promise<void> {
@@ -631,6 +681,7 @@ async function openProject(projectPath: string): Promise<void> {
   setupMessageNudge()
   setupTaskNudge()
   setupInfoNudge()
+  setupStaleTaskWatchdog()
   loadLinkState()
 
   // Update window title
@@ -656,6 +707,7 @@ async function closeProject(): Promise<void> {
   lastNudgeDelivery.clear()
   for (const timer of nudgeFallbackTimers.values()) clearTimeout(timer)
   nudgeFallbackTimers.clear()
+  if (staleTaskTimer) { clearInterval(staleTaskTimer); staleTaskTimer = null }
 
   // Close hub
   hub?.close()
