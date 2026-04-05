@@ -51,6 +51,7 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
         }
       }
       if (ev.ctrlKey && ev.key === 'v' && ev.type === 'keydown') {
+        ev.preventDefault() // prevent native paste → onData double-write
         navigator.clipboard.readText().then(text => {
           if (text) window.electronAPI.writeToPty(agentId, text)
         })
