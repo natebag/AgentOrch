@@ -10,7 +10,7 @@ import { useWindowManager } from './hooks/useWindowManager'
 import { useAgents } from './hooks/useAgents'
 import { UpdateNotice } from './components/UpdateNotice'
 import { WhatsNewDialog } from './components/WhatsNewDialog'
-import type { AgentConfig, AgentGroup, RecentProject, WindowPosition, CanvasState } from '../shared/types'
+import type { AgentConfig, AgentGroup, RecentProject, WindowPosition, CanvasState, WorkspaceTab } from '../shared/types'
 
 declare const electronAPI: {
   getProject: () => Promise<RecentProject | null>
@@ -27,6 +27,8 @@ const USAGE_ID = '__usage__'
 const GIT_ID = '__git__'
 
 export function App(): React.ReactElement {
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([{ id: 'tab-default', name: 'Workspace 1' }])
+  const [activeTabId, setActiveTabId] = useState('tab-default')
   const [showSpawnDialog, setShowSpawnDialog] = useState(false)
   const [showPresetDialog, setShowPresetDialog] = useState(false)
   const [showBugReport, setShowBugReport] = useState(false)
@@ -54,9 +56,37 @@ export function App(): React.ReactElement {
 
   const handleSpawn = useCallback(async (config: Omit<AgentConfig, 'id'>) => {
     setShowSpawnDialog(false)
-    const agentId = await spawnAgent(config)
+    const configWithTab = { ...config, tabId: activeTabId }
+    const agentId = await spawnAgent(configWithTab)
     addWindow(agentId, `${config.name} (${config.cli})`, getStatusColor('idle'))
-  }, [spawnAgent, addWindow, getStatusColor])
+  }, [spawnAgent, addWindow, getStatusColor, activeTabId])
+
+  const handleCreateTab = useCallback(async () => {
+    const tab = await window.electronAPI.createTab()
+    setTabs(prev => [...prev, tab])
+    setActiveTabId(tab.id)
+  }, [])
+
+  const handleCloseTab = useCallback(async (tabId: string) => {
+    if (tabs.length <= 1) return
+    await window.electronAPI.closeTab(tabId)
+    setTabs(prev => prev.filter(t => t.id !== tabId))
+    if (activeTabId === tabId) {
+      const remaining = tabs.filter(t => t.id !== tabId)
+      setActiveTabId(remaining[0]?.id || 'tab-default')
+    }
+  }, [tabs, activeTabId])
+
+  const handleRenameTab = useCallback(async (tabId: string, name: string) => {
+    await window.electronAPI.renameTab(tabId, name)
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, name } : t))
+  }, [])
+
+  const handleSwitchTab = useCallback((tabId: string) => {
+    setActiveTabId(tabId)
+  }, [])
+
+  const tabAgents = agents.filter(a => !a.tabId || a.tabId === activeTabId)
 
   const handleClose = useCallback(async (windowId: string) => {
     // Panel windows just get removed, no agent to kill
@@ -274,7 +304,7 @@ export function App(): React.ReactElement {
           <TopBar
             projectName={project.name}
             onSwitchProject={() => setShowProjectPicker(true)}
-            agents={agents}
+            agents={tabAgents}
             onSpawnClick={() => setShowSpawnDialog(true)}
             onAgentClick={handleAgentPillClick}
             onClearContext={handleClearContext}
@@ -300,10 +330,16 @@ export function App(): React.ReactElement {
             groups={groups}
             onLinkDragStart={handleTopBarLinkDragStart}
             linkDraggingFrom={linkDraggingFrom}
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSwitchTab={handleSwitchTab}
+            onCreateTab={handleCreateTab}
+            onCloseTab={handleCloseTab}
+            onRenameTab={handleRenameTab}
           />
           <Workspace
             windows={windows}
-            agents={agents}
+            agents={tabAgents}
             zoom={zoom}
             pan={pan}
             links={links}

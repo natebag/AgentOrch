@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { AgentPill } from './AgentPill'
+import { TabBar } from './TabBar'
 import type { AgentState } from '../../shared/types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,6 +39,12 @@ interface TopBarProps {
   groups: Array<{ id: string; color: string; members: string[] }>
   onLinkDragStart: (agentName: string, e: React.MouseEvent) => void
   linkDraggingFrom: string | null
+  tabs: Array<{ id: string; name: string }>
+  activeTabId: string
+  onSwitchTab: (tabId: string) => void
+  onCreateTab: () => void
+  onCloseTab: (tabId: string) => void
+  onRenameTab: (tabId: string, name: string) => void
 }
 
 function DropdownMenu({ items, onClose, style }: {
@@ -105,7 +112,8 @@ export function TopBar({
   racOpen, onToggleRac, usageOpen, onToggleUsage,
   gitOpen, onToggleGit,
   onPresetsClick, onBugReport, onSettingsClick,
-  groups, onLinkDragStart, linkDraggingFrom
+  groups, onLinkDragStart, linkDraggingFrom,
+  tabs, activeTabId, onSwitchTab, onCreateTab, onCloseTab, onRenameTab
 }: TopBarProps): React.ReactElement {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false)
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
@@ -155,6 +163,18 @@ export function TopBar({
         </button>
       )}
       {projectName && <div style={{ width: '1px', height: '24px', backgroundColor: '#333' }} />}
+
+      {/* Workspace tabs */}
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSwitchTab={onSwitchTab}
+        onCreateTab={onCreateTab}
+        onCloseTab={onCloseTab}
+        onRenameTab={onRenameTab}
+      />
+
+      <div style={{ width: '1px', height: '24px', backgroundColor: '#333' }} />
 
       {/* Spawn button */}
       <button onClick={onSpawnClick} style={{
