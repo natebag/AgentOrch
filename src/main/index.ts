@@ -490,6 +490,25 @@ function flushPendingNudges(agentName: string): void {
 // When a message is queued for an agent, nudge them to call get_messages().
 function setupMessageNudge(): void {
   hub.messages.onMessageQueued = (msg) => {
+    // When an agent messages the user, show an OS notification
+    if (msg.to === 'user') {
+      const settings = loadSettings()
+      if (settings.notifications !== false) {
+        const preview = msg.message.length > 120 ? msg.message.slice(0, 120) + '…' : msg.message
+        const notification = new Notification({
+          title: `Message from ${msg.from}`,
+          body: preview,
+          icon: undefined
+        })
+        notification.on('click', () => {
+          mainWindow?.show()
+          mainWindow?.focus()
+        })
+        notification.show()
+      }
+      return
+    }
+
     const target = hub.registry.get(msg.to)
     if (!target) return
 
