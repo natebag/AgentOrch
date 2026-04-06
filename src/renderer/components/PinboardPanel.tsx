@@ -13,21 +13,33 @@ const COLUMN_CONFIG: { key: PinboardTask['status']; label: string; accent: strin
   { key: 'completed', label: 'Completed', accent: '#22c55e' }
 ]
 
-function TaskCard({ task }: { task: PinboardTask }) {
+const STATUS_LABELS: Record<PinboardTask['status'], string> = {
+  open: 'Open',
+  in_progress: 'In Progress',
+  completed: 'Completed'
+}
+
+function TaskCard({ task, onClick }: { task: PinboardTask; onClick: () => void }) {
   const desc = task.description.length > 120
     ? task.description.slice(0, 120) + '...'
     : task.description
 
   return (
-    <div style={{
-      backgroundColor: '#2a2a2a',
-      border: '1px solid #333',
-      borderRadius: '4px',
-      padding: '8px 10px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '4px'
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        backgroundColor: '#2a2a2a',
+        border: '1px solid #333',
+        borderRadius: '4px',
+        padding: '8px 10px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        cursor: 'pointer'
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#555' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#333' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{
           width: '8px', height: '8px', borderRadius: '50%',
@@ -65,6 +77,137 @@ function TaskCard({ task }: { task: PinboardTask }) {
   )
 }
 
+function TaskDetail({ task, onBack }: { task: PinboardTask; onBack: () => void }) {
+  const statusColor = COLUMN_CONFIG.find(c => c.key === task.status)?.accent ?? '#888'
+
+  return (
+    <div style={{
+      width: '100%', height: '100%',
+      backgroundColor: '#1a1a1a',
+      fontFamily: 'monospace',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '10px 12px',
+        borderBottom: '1px solid #333',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        flexShrink: 0
+      }}>
+        <button
+          onClick={onBack}
+          style={{
+            background: 'none', border: '1px solid #444', borderRadius: '4px',
+            color: '#aaa', fontSize: '11px', cursor: 'pointer', padding: '2px 8px',
+            fontFamily: 'monospace'
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#666' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#444' }}
+        >
+          ← Back
+        </button>
+        <span style={{
+          width: '8px', height: '8px', borderRadius: '50%',
+          backgroundColor: PRIORITY_COLORS[task.priority],
+          flexShrink: 0
+        }} />
+        <span style={{ color: '#e0e0e0', fontSize: '13px', fontWeight: 600, flex: 1 }}>
+          {task.title}
+        </span>
+        <span style={{
+          color: statusColor, fontSize: '10px', fontWeight: 600,
+          padding: '2px 8px', border: `1px solid ${statusColor}`,
+          borderRadius: '3px', textTransform: 'uppercase'
+        }}>
+          {STATUS_LABELS[task.status]}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        {/* Meta row */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '11px' }}>
+          <div>
+            <span style={{ color: '#666' }}>Priority: </span>
+            <span style={{ color: PRIORITY_COLORS[task.priority] }}>{task.priority}</span>
+          </div>
+          {task.createdBy && (
+            <div>
+              <span style={{ color: '#666' }}>Created by: </span>
+              <span style={{ color: '#aaa' }}>{task.createdBy}</span>
+            </div>
+          )}
+          {task.claimedBy && (
+            <div>
+              <span style={{ color: '#666' }}>Claimed by: </span>
+              <span style={{ color: '#aaa' }}>{task.claimedBy}</span>
+            </div>
+          )}
+          <div>
+            <span style={{ color: '#666' }}>Created: </span>
+            <span style={{ color: '#aaa' }}>
+              {new Date(task.createdAt).toLocaleString()}
+            </span>
+          </div>
+          {task.targetRole && (
+            <div>
+              <span style={{ color: '#666' }}>Target role: </span>
+              <span style={{ color: '#aaa' }}>{task.targetRole}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
+        <div>
+          <div style={{ color: '#666', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>
+            Description
+          </div>
+          <div style={{
+            color: '#ccc', fontSize: '12px', lineHeight: '1.5',
+            backgroundColor: '#222', borderRadius: '4px', padding: '10px',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+          }}>
+            {task.description || '(none)'}
+          </div>
+        </div>
+
+        {/* Result */}
+        {task.result && (
+          <div>
+            <div style={{ color: '#666', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px' }}>
+              Result
+            </div>
+            <div style={{
+              color: '#6ee7b7', fontSize: '12px', lineHeight: '1.5',
+              backgroundColor: '#1a2e1a', border: '1px solid #2a3e2a',
+              borderRadius: '4px', padding: '10px',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+            }}>
+              {task.result}
+            </div>
+          </div>
+        )}
+
+        {/* Task ID */}
+        <div style={{ fontSize: '10px', color: '#444', marginTop: 'auto' }}>
+          ID: {task.id}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 declare const electronAPI: {
   getPinboardTasks: (tabId?: string) => Promise<PinboardTask[]>
   clearCompletedTasks: () => Promise<{ status: string; cleared: number }>
@@ -73,6 +216,7 @@ declare const electronAPI: {
 
 export function PinboardPanel({ tabId }: { tabId?: string }) {
   const [tasks, setTasks] = useState<PinboardTask[]>([])
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   useEffect(() => {
     window.electronAPI.getPinboardTasks(tabId).then(setTasks)
@@ -108,6 +252,12 @@ export function PinboardPanel({ tabId }: { tabId?: string }) {
         No tasks yet
       </div>
     )
+  }
+
+  // Show detail view if a task is selected
+  const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null
+  if (selectedTask) {
+    return <TaskDetail task={selectedTask} onBack={() => setSelectedTaskId(null)} />
   }
 
   const grouped = Object.fromEntries(
@@ -172,7 +322,7 @@ export function PinboardPanel({ tabId }: { tabId?: string }) {
             gap: '6px'
           }}>
             {grouped[col.key].map(task => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard key={task.id} task={task} onClick={() => setSelectedTaskId(task.id)} />
             ))}
           </div>
         </div>
