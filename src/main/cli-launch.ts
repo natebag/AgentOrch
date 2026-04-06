@@ -4,22 +4,49 @@ import type { AgentConfig } from '../shared/types'
  * Build a shell command that removes ALL agentorch-* MCP registrations
  * for a given CLI tool. Prevents stale registrations from accumulating
  * when agent names change between sessions.
+ *
+ * Gemini `mcp list` prefixes lines with a status icon (✓/✗) so the name
+ * is NOT the first token — we use grep -o / regex extraction to pull out
+ * the agentorch-* name regardless of surrounding text.
+ *
+ * Codex `mcp list` prints the name as the first token, so we keep the
+ * simpler start-anchored match there to avoid changing what already works.
  */
 function buildMcpCleanupCmd(
   cli: 'codex' | 'gemini',
   shell: AgentConfig['shell']
 ): string {
+  if (cli === 'gemini') return buildGeminiCleanupCmd(shell)
+  return buildCodexCleanupCmd(shell)
+}
+
+function buildCodexCleanupCmd(shell: AgentConfig['shell']): string {
   if (shell === 'cmd') {
-    return `for /f "tokens=1" %i in ('${cli} mcp list 2^>nul ^| findstr /B "agentorch"') do @${cli} mcp remove %i 2>nul`
+    return `for /f "tokens=1" %i in ('codex mcp list 2^>nul ^| findstr /B "agentorch"') do @codex mcp remove %i 2>nul`
   }
   if (shell === 'powershell') {
-    return `${cli} mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { ${cli} mcp remove ($_ -split '\\s+')[0] 2>$null }`
+    return `codex mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { codex mcp remove ($_ -split '\\s+')[0] 2>$null }`
   }
   if (shell === 'fish') {
-    return `${cli} mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; ${cli} mcp remove $name 2>/dev/null; end`
+    return `codex mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; codex mcp remove $name 2>/dev/null; end`
   }
   // bash, zsh
-  return `${cli} mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; do ${cli} mcp remove "$name" 2>/dev/null; done`
+  return `codex mcp list 2>/dev/null | grep '^agentorch' | awk '{print $1}' | while read name; do codex mcp remove "$name" 2>/dev/null; done`
+}
+
+function buildGeminiCleanupCmd(shell: AgentConfig['shell']): string {
+  if (shell === 'cmd') {
+    // Gemini lines: "✓ agentorch-name: ..." — token 2 with ": " delimiters is the name
+    return `for /f "tokens=2 delims=: " %i in ('gemini mcp list 2^>nul ^| findstr "agentorch"') do @gemini mcp remove %i 2>nul`
+  }
+  if (shell === 'powershell') {
+    return `gemini mcp list 2>$null | ForEach-Object { if ($_ -match '(agentorch[^\\s:]+)') { gemini mcp remove $Matches[1] 2>$null } }`
+  }
+  if (shell === 'fish') {
+    return `gemini mcp list 2>/dev/null | grep -o 'agentorch[^ :]*' | while read name; gemini mcp remove $name 2>/dev/null; end`
+  }
+  // bash, zsh
+  return `gemini mcp list 2>/dev/null | grep -o 'agentorch[^ :]*' | while read name; do gemini mcp remove "$name" 2>/dev/null; done`
 }
 
 export function buildCliLaunchCommands(
@@ -71,7 +98,7 @@ export function buildCliLaunchCommands(
     const mcpName = `agentorch-${config.name.replace(/\s+/g, '-')}`
     const cmds = [
       buildMcpCleanupCmd('gemini', config.shell),
-      `gemini mcp add ${mcpName} node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
+      `gemini mcp add ${mcpName} -- node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
     ]
     let geminiCmd = 'gemini'
     if (config.model) geminiCmd += ` --model ${config.model}`

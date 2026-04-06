@@ -36,8 +36,8 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )).toEqual([
-      "gemini mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { gemini mcp remove ($_ -split '\\s+')[0] 2>$null }",
-      'gemini mcp add agentorch-worker-1 node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
+      "gemini mcp list 2>$null | ForEach-Object { if ($_ -match '(agentorch[^\\s:]+)') { gemini mcp remove $Matches[1] 2>$null } }",
+      'gemini mcp add agentorch-worker-1 -- node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
       'gemini --model gemini-2.5-pro --yolo'
     ])
   })
@@ -76,9 +76,24 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )!
-    expect(cmds[0]).toContain('grep')
+    expect(cmds[0]).toContain('grep -o')
     expect(cmds[0]).toContain('while read name; do')
     expect(cmds[0]).toContain('2>/dev/null')
+  })
+
+  it('generates Gemini cleanup that handles status-prefixed mcp list output', () => {
+    // Gemini mcp list outputs: "✓ name: command: ..." — name is NOT the first token
+    const cmds = buildCliLaunchCommands(
+      makeConfig({ cli: 'gemini', shell: 'bash', autoMode: false }),
+      '/tmp/agentorch-mcp.json',
+      '/tmp/mcp-server.js',
+      7777,
+      'secret'
+    )!
+    // Must NOT anchor grep to start of line (^) since Gemini prefixes with status icon
+    expect(cmds[0]).not.toContain("grep '^agentorch'")
+    // Must use grep -o to extract just the agentorch name
+    expect(cmds[0]).toContain("grep -o 'agentorch[^ :]*'")
   })
 
   it('launches Copilot with session-scoped MCP config and allow-all mode', () => {
