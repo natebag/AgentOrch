@@ -138,6 +138,16 @@ export const IPC = {
   TAB_CREATE: 'tab:create',
   TAB_CLOSE: 'tab:close',
   TAB_RENAME: 'tab:rename',
+  SCHEDULES_LIST: 'schedules:list',
+  SCHEDULES_CREATE: 'schedules:create',
+  SCHEDULES_PAUSE: 'schedules:pause',
+  SCHEDULES_RESUME: 'schedules:resume',
+  SCHEDULES_STOP: 'schedules:stop',
+  SCHEDULES_RESTART: 'schedules:restart',
+  SCHEDULES_EDIT: 'schedules:edit',
+  SCHEDULES_DELETE: 'schedules:delete',
+  SCHEDULES_UPDATED: 'schedules:updated',
+  SCHEDULER_RESUMED: 'scheduler:resumed',
 } as const
 
 export interface BuddyMessage {
@@ -271,4 +281,43 @@ export interface WorkspacePreset {
   windows: WindowPosition[]
   canvas: CanvasState
   savedAt: string
+}
+
+export interface FireHistoryEntry {
+  timestamp: number
+  outcome: 'fired' | 'skipped_offline'
+}
+
+export type ScheduleStatus = 'active' | 'paused' | 'stopped' | 'expired'
+
+export interface ScheduledPrompt {
+  id: string
+  tabId: string
+  agentId: string
+  name: string
+  promptText: string
+  intervalMinutes: number
+  durationHours: number | null   // null = infinite
+  startedAt: number
+  expiresAt: number | null       // null = infinite
+  nextFireAt: number
+  pausedAt: number | null
+  status: ScheduleStatus
+  fireHistory: FireHistoryEntry[]
+}
+
+export interface CreateScheduleInput {
+  tabId: string
+  agentId: string
+  name?: string
+  promptText: string
+  intervalMinutes: number
+  durationHours: number | null
+}
+
+export interface EditScheduleInput {
+  name?: string
+  promptText?: string
+  intervalMinutes?: number
+  durationHours?: number | null
 }
