@@ -1425,6 +1425,47 @@ function setupIPC(): void {
     tab.name = name
     return { status: 'ok' }
   })
+
+  // Scheduled prompts
+  ipcMain.handle(IPC.SCHEDULES_LIST, () => {
+    return promptScheduler?.list() ?? []
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_CREATE, (_event, input) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.create(input)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_PAUSE, (_event, id: string) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.pause(id)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_RESUME, (_event, id: string) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.resume(id)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_STOP, (_event, id: string) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.stop(id)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_RESTART, (_event, id: string) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.restart(id)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_EDIT, (_event, id: string, updates) => {
+    if (!promptScheduler) throw new Error('No project open')
+    return promptScheduler.edit(id, updates)
+  })
+
+  ipcMain.handle(IPC.SCHEDULES_DELETE, (_event, id: string) => {
+    if (!promptScheduler) throw new Error('No project open')
+    promptScheduler.delete(id)
+    return { status: 'ok' }
+  })
 }
 
 async function main(): Promise<void> {

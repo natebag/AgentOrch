@@ -107,6 +107,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createTab: (name?: string) => ipcRenderer.invoke(IPC.TAB_CREATE, name),
   closeTab: (tabId: string) => ipcRenderer.invoke(IPC.TAB_CLOSE, tabId),
   renameTab: (tabId: string, name: string) => ipcRenderer.invoke(IPC.TAB_RENAME, tabId, name),
+  // Scheduled prompts
+  listSchedules: () => ipcRenderer.invoke(IPC.SCHEDULES_LIST),
+  createSchedule: (input: unknown) => ipcRenderer.invoke(IPC.SCHEDULES_CREATE, input),
+  pauseSchedule: (id: string) => ipcRenderer.invoke(IPC.SCHEDULES_PAUSE, id),
+  resumeSchedule: (id: string) => ipcRenderer.invoke(IPC.SCHEDULES_RESUME, id),
+  stopSchedule: (id: string) => ipcRenderer.invoke(IPC.SCHEDULES_STOP, id),
+  restartSchedule: (id: string) => ipcRenderer.invoke(IPC.SCHEDULES_RESTART, id),
+  editSchedule: (id: string, updates: unknown) => ipcRenderer.invoke(IPC.SCHEDULES_EDIT, id, updates),
+  deleteSchedule: (id: string) => ipcRenderer.invoke(IPC.SCHEDULES_DELETE, id),
+  onSchedulesUpdated: (callback: (schedules: unknown[]) => void) => {
+    const handler = (_event: unknown, schedules: unknown[]) => callback(schedules)
+    ipcRenderer.on(IPC.SCHEDULES_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC.SCHEDULES_UPDATED, handler)
+  },
+  onSchedulerResumed: (callback: (info: { count: number }) => void) => {
+    const handler = (_event: unknown, info: { count: number }) => callback(info)
+    ipcRenderer.on(IPC.SCHEDULER_RESUMED, handler)
+    return () => ipcRenderer.removeListener(IPC.SCHEDULER_RESUMED, handler)
+  },
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),
