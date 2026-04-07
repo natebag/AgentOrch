@@ -196,3 +196,86 @@ describe('PromptScheduler.load', () => {
     expect(s.fireHistory).toEqual([])
   })
 })
+
+describe('PromptScheduler.tick', () => {
+  it('fires when now >= nextFireAt and agent is alive', () => {
+    let now = 1_000_000
+    const ptyWriter = vi.fn()
+    const { scheduler } = makeScheduler({ now: () => now, ptyWriter })
+    const created = scheduler.create(validInput)
+    now = created.nextFireAt
+    scheduler.tick()
+    expect(ptyWriter).toHaveBeenCalledWith('agent-1', 'keep going please')
+    const after = scheduler.get(created.id)!
+    expect(after.fireHistory).toHaveLength(1)
+    expect(after.fireHistory[0].outcome).toBe('fired')
+    expect(after.nextFireAt).toBe(now + 45 * 60_000)
+  })
+
+  it('does not fire before nextFireAt', () => {
+    let now = 1_000_000
+    const ptyWriter = vi.fn()
+    const { scheduler } = makeScheduler({ now: () => now, ptyWriter })
+    const created = scheduler.create(validInput)
+    now = created.nextFireAt - 1
+    scheduler.tick()
+    expect(ptyWriter).not.toHaveBeenCalled()
+  })
+
+  it('records skipped_offline when agentLookup returns false', () => {
+    let now = 1_000_000
+    const ptyWriter = vi.fn()
+    const { scheduler } = makeScheduler({
+      now: () => now,
+      ptyWriter,
+      agentLookup: () => false
+    })
+    const created = scheduler.create(validInput)
+    now = created.nextFireAt
+    scheduler.tick()
+    expect(ptyWriter).not.toHaveBeenCalled()
+    const after = scheduler.get(created.id)!
+    expect(after.fireHistory[0].outcome).toBe('skipped_offline')
+    expect(after.nextFireAt).toBe(now + 45 * 60_000)
+    expect(after.status).toBe('active') // still alive
+  })
+
+  it('records skipped_offline when ptyWriter throws', () => {
+    let now = 1_000_000
+    const ptyWriter = vi.fn(() => { throw new Error('pty dead') })
+    const { scheduler } = makeScheduler({ now: () => now, ptyWriter })
+    const created = scheduler.create(validInput)
+    now = created.nextFireAt
+    scheduler.tick()
+    const after = scheduler.get(created.id)!
+    expect(after.fireHistory[0].outcome).toBe('skipped_offline')
+  })
+
+  it('transitions to expired when now >= expiresAt', () => {
+    let now = 1_000_000
+    const { scheduler } = makeScheduler({ now: () => now })
+    const created = scheduler.create(validInput)
+    now = created.expiresAt! + 1
+    scheduler.tick()
+    expect(scheduler.get(created.id)!.status).toBe('expired')
+  })
+
+  it('infinite schedules never transition to expired', () => {
+    let now = 1_000_000
+    const { scheduler } = makeScheduler({ now: () => now })
+    const created = scheduler.create({ ...validInput, durationHours: null })
+    now = 1_000_000 + 10_000 * 60 * 60_000 // 10,000 hours later
+    scheduler.tick()
+    expect(scheduler.get(created.id)!.status).toBe('active')
+  })
+
+  it('persists fire to store after each tick', () => {
+    let now = 1_000_000
+    const { scheduler, store } = makeScheduler({ now: () => now })
+    const created = scheduler.create(validInput)
+    now = created.nextFireAt
+    scheduler.tick()
+    const [persisted] = store.load()
+    expect(persisted.fireHistory).toHaveLength(1)
+  })
+})
