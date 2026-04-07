@@ -1,0 +1,198 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import Database from 'better-sqlite3'
+import { createDatabase } from '../../src/main/db/database'
+import { SchedulesStore } from '../../src/main/scheduler/schedules-store'
+import { PromptScheduler } from '../../src/main/scheduler/prompt-scheduler'
+import type { CreateScheduleInput } from '../../src/shared/types'
+
+function makeScheduler(overrides: {
+  now?: () => number
+  ptyWriter?: (id: string, text: string) => void
+  agentLookup?: (id: string) => boolean
+  onChange?: () => void
+  onResumed?: (count: number) => void
+} = {}) {
+  const db = createDatabase(':memory:')
+  const store = new SchedulesStore(db)
+  const now = overrides.now ?? (() => 1_000_000)
+  const ptyWriter = overrides.ptyWriter ?? vi.fn()
+  const agentLookup = overrides.agentLookup ?? (() => true)
+  const onChange = overrides.onChange ?? vi.fn()
+  const onResumed = overrides.onResumed ?? vi.fn()
+  const scheduler = new PromptScheduler({
+    store,
+    clock: now,
+    ptyWriter,
+    agentLookup,
+    onChange,
+    onResumed
+  })
+  return { db, store, scheduler, ptyWriter, agentLookup, onChange, onResumed }
+}
+
+const validInput: CreateScheduleInput = {
+  tabId: 'tab-default',
+  agentId: 'agent-1',
+  name: 'Keep going',
+  promptText: 'keep going please',
+  intervalMinutes: 45,
+  durationHours: 8
+}
+
+describe('PromptScheduler.create', () => {
+  it('creates an active schedule with first fire waiting one full interval', () => {
+    const { scheduler } = makeScheduler()
+    const s = scheduler.create(validInput)
+    expect(s.status).toBe('active')
+    expect(s.startedAt).toBe(1_000_000)
+    expect(s.nextFireAt).toBe(1_000_000 + 45 * 60_000)
+    expect(s.expiresAt).toBe(1_000_000 + 8 * 60 * 60_000)
+    expect(s.fireHistory).toEqual([])
+  })
+
+  it('defaults name to "Schedule #N" when not provided', () => {
+    const { scheduler } = makeScheduler()
+    const s1 = scheduler.create({ ...validInput, name: undefined })
+    const s2 = scheduler.create({ ...validInput, name: undefined })
+    expect(s1.name).toBe('Schedule #1')
+    expect(s2.name).toBe('Schedule #2')
+  })
+
+  it('supports infinite duration', () => {
+    const { scheduler } = makeScheduler()
+    const s = scheduler.create({ ...validInput, durationHours: null })
+    expect(s.durationHours).toBeNull()
+    expect(s.expiresAt).toBeNull()
+  })
+
+  it('persists created schedule to store', () => {
+    const { scheduler, store } = makeScheduler()
+    scheduler.create(validInput)
+    expect(store.load()).toHaveLength(1)
+  })
+
+  it('emits onChange after create', () => {
+    const onChange = vi.fn()
+    const { scheduler } = makeScheduler({ onChange })
+    scheduler.create(validInput)
+    expect(onChange).toHaveBeenCalled()
+  })
+
+  it('throws on empty promptText', () => {
+    const { scheduler } = makeScheduler()
+    expect(() => scheduler.create({ ...validInput, promptText: '   ' })).toThrow(/prompt/i)
+  })
+
+  it('throws on non-positive intervalMinutes', () => {
+    const { scheduler } = makeScheduler()
+    expect(() => scheduler.create({ ...validInput, intervalMinutes: 0 })).toThrow(/interval/i)
+  })
+
+  it('throws on non-positive durationHours when provided', () => {
+    const { scheduler } = makeScheduler()
+    expect(() => scheduler.create({ ...validInput, durationHours: 0 })).toThrow(/duration/i)
+  })
+})
+
+describe('PromptScheduler.list', () => {
+  it('returns all schedules sorted by startedAt asc', () => {
+    let n = 1_000_000
+    const { scheduler } = makeScheduler({ now: () => n })
+    scheduler.create(validInput)
+    n = 1_001_000
+    scheduler.create({ ...validInput, name: 'Second' })
+    const list = scheduler.list()
+    expect(list).toHaveLength(2)
+    expect(list[0].startedAt).toBeLessThan(list[1].startedAt)
+  })
+})
+
+describe('PromptScheduler.load', () => {
+  it('loads active schedules from store and emits onResumed with active count only', () => {
+    const db = createDatabase(':memory:')
+    const store = new SchedulesStore(db)
+    store.save({
+      id: 'a', tabId: 't', agentId: 'g', name: 'A', promptText: 'x',
+      intervalMinutes: 45, durationHours: 8,
+      startedAt: 1000, expiresAt: 1000 + 8 * 60 * 60_000,
+      nextFireAt: 1000 + 45 * 60_000, pausedAt: null,
+      status: 'active', fireHistory: []
+    })
+    store.save({
+      id: 'b', tabId: 't', agentId: 'g', name: 'B', promptText: 'x',
+      intervalMinutes: 45, durationHours: 8,
+      startedAt: 1000, expiresAt: 1000 + 8 * 60 * 60_000,
+      nextFireAt: 1000 + 45 * 60_000, pausedAt: 1500,
+      status: 'paused', fireHistory: []
+    })
+    store.save({
+      id: 'c', tabId: 't', agentId: 'g', name: 'C', promptText: 'x',
+      intervalMinutes: 45, durationHours: 8,
+      startedAt: 1000, expiresAt: 2000,
+      nextFireAt: 1000 + 45 * 60_000, pausedAt: null,
+      status: 'expired', fireHistory: []
+    })
+    const onResumed = vi.fn()
+    const scheduler = new PromptScheduler({
+      store,
+      clock: () => 1_500_000,
+      ptyWriter: vi.fn(),
+      agentLookup: () => true,
+      onChange: vi.fn(),
+      onResumed
+    })
+    scheduler.load()
+    expect(scheduler.list()).toHaveLength(3)
+    expect(onResumed).toHaveBeenCalledWith(1) // only 'a' is active
+  })
+
+  it('marks schedules as expired on load if past expiresAt', () => {
+    const db = createDatabase(':memory:')
+    const store = new SchedulesStore(db)
+    store.save({
+      id: 'a', tabId: 't', agentId: 'g', name: 'A', promptText: 'x',
+      intervalMinutes: 45, durationHours: 1,
+      startedAt: 1000, expiresAt: 5000,
+      nextFireAt: 1000 + 45 * 60_000, pausedAt: null,
+      status: 'active', fireHistory: []
+    })
+    const scheduler = new PromptScheduler({
+      store,
+      clock: () => 10_000, // well past expiresAt
+      ptyWriter: vi.fn(),
+      agentLookup: () => true,
+      onChange: vi.fn(),
+      onResumed: vi.fn()
+    })
+    scheduler.load()
+    const list = scheduler.list()
+    expect(list[0].status).toBe('expired')
+  })
+
+  it('discards missed fires on load (nextFireAt reset to now + interval)', () => {
+    const db = createDatabase(':memory:')
+    const store = new SchedulesStore(db)
+    const startedAt = 1_000_000
+    const expiresAt = startedAt + 100 * 60 * 60_000 // far future
+    store.save({
+      id: 'a', tabId: 't', agentId: 'g', name: 'A', promptText: 'x',
+      intervalMinutes: 45, durationHours: 100,
+      startedAt, expiresAt,
+      nextFireAt: startedAt + 45 * 60_000, pausedAt: null,
+      status: 'active', fireHistory: []
+    })
+    const now = startedAt + 10 * 60 * 60_000 // 10 hours later, many missed fires
+    const scheduler = new PromptScheduler({
+      store,
+      clock: () => now,
+      ptyWriter: vi.fn(),
+      agentLookup: () => true,
+      onChange: vi.fn(),
+      onResumed: vi.fn()
+    })
+    scheduler.load()
+    const [s] = scheduler.list()
+    expect(s.nextFireAt).toBe(now + 45 * 60_000)
+    expect(s.fireHistory).toEqual([])
+  })
+})
