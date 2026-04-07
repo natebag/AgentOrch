@@ -84,15 +84,23 @@ export function ScheduleDialog({ open, mode, agents, initialValues, onSubmit, on
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-    }}>
-      <div style={{
-        background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
-        padding: 20, width: 440, color: '#e0e0e0', display: 'flex',
-        flexDirection: 'column', gap: 12
-      }}>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#1a1a1a', border: '1px solid #333', borderRadius: 6,
+          padding: 20, width: 440, maxWidth: 'calc(100vw - 40px)',
+          maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
+          color: '#e0e0e0', display: 'flex',
+          flexDirection: 'column', gap: 10
+        }}
+      >
         <h3 style={{ margin: 0, fontSize: 16 }}>
           {mode === 'create' ? 'New Scheduled Prompt' : 'Edit Scheduled Prompt'}
         </h3>
