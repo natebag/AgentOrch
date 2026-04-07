@@ -26,6 +26,10 @@ export function ScheduleDialog({ open, mode, agents, initialValues, onSubmit, on
   const [durationHours, setDurationHours] = useState('8')
   const [error, setError] = useState<string | null>(null)
 
+  // Reset form fields ONLY when the dialog transitions from closed → open.
+  // Including `agents` in deps caused the form to wipe every second because
+  // SchedulesPanel re-renders on its countdown ticker.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return
     if (initialValues) {
@@ -44,7 +48,7 @@ export function ScheduleDialog({ open, mode, agents, initialValues, onSubmit, on
       setDurationHours('8')
     }
     setError(null)
-  }, [open, initialValues, agents])
+  }, [open])
 
   if (!open) return null
 
