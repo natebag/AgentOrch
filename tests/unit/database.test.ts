@@ -188,3 +188,41 @@ describe('InfoStore', () => {
     expect(loaded[2].note).toBe('third')
   })
 })
+
+describe('ScheduledPrompts table', () => {
+  it('creates the scheduled_prompts table with required columns', () => {
+    const db = createDatabase(':memory:')
+    const cols = db.prepare("PRAGMA table_info(scheduled_prompts)").all() as Array<{ name: string; type: string; notnull: number }>
+    const colNames = cols.map(c => c.name).sort()
+    expect(colNames).toEqual([
+      'agent_id',
+      'duration_hours',
+      'expires_at',
+      'fire_history',
+      'id',
+      'interval_minutes',
+      'name',
+      'next_fire_at',
+      'paused_at',
+      'prompt_text',
+      'started_at',
+      'status',
+      'tab_id'
+    ])
+    db.close()
+  })
+
+  it('allows nullable duration_hours, expires_at, and paused_at', () => {
+    const db = createDatabase(':memory:')
+    db.prepare(`
+      INSERT INTO scheduled_prompts
+        (id, tab_id, agent_id, name, prompt_text, interval_minutes, duration_hours, started_at, expires_at, next_fire_at, paused_at, status, fire_history)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('id1', 'tab', 'agent', 'Test', 'hello', 45, null, 1000, null, 2000, null, 'active', '[]')
+    const row = db.prepare('SELECT * FROM scheduled_prompts WHERE id = ?').get('id1') as any
+    expect(row.duration_hours).toBeNull()
+    expect(row.expires_at).toBeNull()
+    expect(row.paused_at).toBeNull()
+    db.close()
+  })
+})

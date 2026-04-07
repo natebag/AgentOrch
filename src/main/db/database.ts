@@ -32,6 +32,22 @@ export function createDatabase(dbPath: string): Database.Database {
       tags TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS scheduled_prompts (
+      id TEXT PRIMARY KEY,
+      tab_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      prompt_text TEXT NOT NULL,
+      interval_minutes INTEGER NOT NULL,
+      duration_hours INTEGER,
+      started_at INTEGER NOT NULL,
+      expires_at INTEGER,
+      next_fire_at INTEGER NOT NULL,
+      paused_at INTEGER,
+      status TEXT NOT NULL CHECK(status IN ('active', 'paused', 'stopped', 'expired')),
+      fire_history TEXT NOT NULL
+    );
   `)
 
   // Migrations for existing DBs — safe to fail if column already exists
