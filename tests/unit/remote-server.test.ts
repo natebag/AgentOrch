@@ -125,3 +125,26 @@ describe('RemoteServer GET /state', () => {
     expect(res.body.connectionCount).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('RemoteServer GET /agent/:id/output', () => {
+  it('returns the last 50 lines of an agent output', async () => {
+    const deps = makeDeps({
+      getAgentOutput: (id: string) => {
+        if (id === 'a1') return ['line1', 'line2', 'line3']
+        return []
+      }
+    })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    const res = await request(server.getApp()).get(`/r/${token}/agent/a1/output`).expect(200)
+    expect(res.body.lines).toEqual(['line1', 'line2', 'line3'])
+  })
+
+  it('returns empty array for unknown agent', async () => {
+    const deps = makeDeps({ getAgentOutput: () => [] })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    const res = await request(server.getApp()).get(`/r/${token}/agent/unknown/output`).expect(200)
+    expect(res.body.lines).toEqual([])
+  })
+})

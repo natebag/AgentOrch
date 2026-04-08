@@ -93,6 +93,12 @@ export class RemoteServer {
       res.send(html)
     })
 
+    // GET /agent/:agentId/output - last 50 lines, lazy fetched on tap-to-expand
+    this.app.get('/r/:token/agent/:agentId/output', (req: Request, res: Response) => {
+      const lines = this.deps.getAgentOutput(req.params.agentId)
+      res.json({ lines })
+    })
+
     // GET /state - full snapshot for the mobile UI to render
     this.app.get('/r/:token/state', (_req: Request, res: Response) => {
       const snapshot = {
