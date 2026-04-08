@@ -149,6 +149,14 @@ export const IPC = {
   // schedules:* = per-schedule CRUD events; scheduler:* = system-level scheduler events
   SCHEDULES_UPDATED: 'schedules:updated',
   SCHEDULER_RESUMED: 'scheduler:resumed',
+  // Remote View
+  REMOTE_ENABLE: 'remote:enable',
+  REMOTE_DISABLE: 'remote:disable',
+  REMOTE_STATE: 'remote:state',
+  REMOTE_KILL_SESSIONS: 'remote:kill-sessions',
+  REMOTE_REGENERATE: 'remote:regenerate',
+  REMOTE_STATUS_UPDATE: 'remote:status-update',
+  REMOTE_SETUP_PROGRESS: 'remote:setup-progress',
 } as const
 
 export interface BuddyMessage {
@@ -322,3 +330,16 @@ export interface EditScheduleInput {
   intervalMinutes?: number
   durationHours?: number | null
 }
+
+export interface RemoteViewStatus {
+  enabled: boolean
+  publicUrl: string | null
+  connectionCount: number
+  lastActivity: number | null
+}
+
+export type RemoteSetupProgress =
+  | { stage: 'downloading'; message?: string }
+  | { stage: 'starting'; message?: string }
+  | { stage: 'ready'; message?: string }
+  | { stage: 'error'; message?: string }
