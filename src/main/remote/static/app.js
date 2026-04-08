@@ -243,7 +243,90 @@
   // Manual refresh
   $('refresh-btn').addEventListener('click', fetchState)
 
-  // Action handlers — populated by Task 15
+  // Send message
+  async function sendMessage() {
+    const to = $('send-target').value
+    const text = $('send-text').value.trim()
+    if (!to || !text) return
+    try {
+      const res = await fetch(`${BASE}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, text })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        statusMessage(err.error || `Send failed (${res.status})`, 'error')
+        return
+      }
+      $('send-text').value = ''
+      statusMessage(`Sent to ${to}`, 'success')
+    } catch {
+      statusMessage('Network error', 'error')
+    }
+  }
+
+  $('send-btn').addEventListener('click', sendMessage)
+  $('send-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage()
+  })
+
+  // Schedule actions
+  async function scheduleAction(id, action) {
+    if (action === 'restart' && !confirm('Restart this schedule with a fresh clock?')) return
+    try {
+      const res = await fetch(`${BASE}/schedule/${encodeURIComponent(id)}/${action}`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        statusMessage(err.error || `${action} failed`, 'error')
+        return
+      }
+      statusMessage(`Schedule ${action}d`, 'success')
+      fetchState()
+    } catch {
+      statusMessage('Network error', 'error')
+    }
+  }
+
+  // Task modal
+  $('add-task-btn').addEventListener('click', (e) => {
+    e.stopPropagation()
+    $('task-modal').classList.remove('hidden')
+    $('task-title').value = ''
+    $('task-description').value = ''
+    document.querySelector('input[name="priority"][value="medium"]').checked = true
+  })
+
+  $('task-cancel').addEventListener('click', () => {
+    $('task-modal').classList.add('hidden')
+  })
+
+  $('task-submit').addEventListener('click', async () => {
+    const title = $('task-title').value.trim()
+    const description = $('task-description').value.trim()
+    const priority = document.querySelector('input[name="priority"]:checked').value
+    if (!title || !description) {
+      statusMessage('Title and description required', 'error')
+      return
+    }
+    try {
+      const res = await fetch(`${BASE}/task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, priority })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        statusMessage(err.error || 'Failed', 'error')
+        return
+      }
+      $('task-modal').classList.add('hidden')
+      statusMessage('Task posted', 'success')
+      fetchState()
+    } catch {
+      statusMessage('Network error', 'error')
+    }
+  })
 
   // Initial start
   startPolling()
