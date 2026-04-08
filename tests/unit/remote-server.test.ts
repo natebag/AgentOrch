@@ -84,3 +84,44 @@ describe('RemoteServer GET /r/:token/', () => {
     expect(res.text).toContain(token)
   })
 })
+
+describe('RemoteServer GET /state', () => {
+  it('returns project name and lists from injected getters', async () => {
+    const deps = makeDeps({
+      getProjectName: () => 'MyDecomp',
+      getAgents: () => [
+        { id: 'a1', name: 'Orchestrator', cli: 'claude', model: 'sonnet', role: 'orchestrator', status: 'working' }
+      ],
+      getSchedules: () => [
+        { id: 's1', name: 'Keep going', agentName: 'Orchestrator', intervalMinutes: 45, durationHours: 8, nextFireAt: 2_000_000, expiresAt: 30_000_000, status: 'active' }
+      ],
+      getPinboardTasks: () => [
+        { id: 't1', title: 'Fix bug', priority: 'high', status: 'open', claimedBy: null }
+      ],
+      getBuddyRoom: () => [
+        { timestamp: '2026-04-08T12:00:00Z', agentName: 'Worker1', message: 'Done' }
+      ]
+    })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    const res = await request(server.getApp()).get(`/r/${token}/state`).expect(200)
+
+    expect(res.body.projectName).toBe('MyDecomp')
+    expect(res.body.agents).toHaveLength(1)
+    expect(res.body.agents[0].name).toBe('Orchestrator')
+    expect(res.body.schedules).toHaveLength(1)
+    expect(res.body.pinboardTasks).toHaveLength(1)
+    expect(res.body.buddyRoom).toHaveLength(1)
+    expect(typeof res.body.connectionCount).toBe('number')
+    expect(typeof res.body.serverTime).toBe('number')
+  })
+
+  it('connectionCount reflects active sessions', async () => {
+    const deps = makeDeps()
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    await request(server.getApp()).get(`/r/${token}/state`).expect(200)
+    const res = await request(server.getApp()).get(`/r/${token}/state`).expect(200)
+    expect(res.body.connectionCount).toBeGreaterThanOrEqual(1)
+  })
+})

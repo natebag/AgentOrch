@@ -93,9 +93,18 @@ export class RemoteServer {
       res.send(html)
     })
 
-    // GET /state - placeholder, real impl in Task 6
+    // GET /state - full snapshot for the mobile UI to render
     this.app.get('/r/:token/state', (_req: Request, res: Response) => {
-      res.json({ ok: true })
+      const snapshot = {
+        projectName: this.deps.getProjectName(),
+        agents: this.deps.getAgents(),
+        schedules: this.deps.getSchedules(),
+        pinboardTasks: this.deps.getPinboardTasks(),
+        buddyRoom: this.deps.getBuddyRoom(),
+        connectionCount: this.deps.tokenManager.getConnectionCount(),
+        serverTime: Date.now()
+      }
+      res.json(snapshot)
     })
   }
 }
