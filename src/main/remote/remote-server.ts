@@ -1,0 +1,101 @@
+import express, { type Request, type Response, type NextFunction, type Application } from 'express'
+import * as fs from 'fs'
+import * as path from 'path'
+import type { TokenManager } from './token-manager'
+
+export interface RemoteAgentSummary {
+  id: string
+  name: string
+  cli: string
+  model: string
+  role: string
+  status: string
+}
+
+export interface RemoteScheduleSummary {
+  id: string
+  name: string
+  agentName: string
+  intervalMinutes: number
+  durationHours: number | null
+  nextFireAt: number
+  expiresAt: number | null
+  status: string
+}
+
+export interface RemoteTaskSummary {
+  id: string
+  title: string
+  priority: string
+  status: string
+  claimedBy: string | null
+}
+
+export interface RemoteBuddyMessage {
+  timestamp: string
+  agentName: string
+  message: string
+}
+
+export interface RemoteServerDeps {
+  tokenManager: TokenManager
+  getProjectName: () => string
+  getAgents: () => RemoteAgentSummary[]
+  getSchedules: () => RemoteScheduleSummary[]
+  getPinboardTasks: () => RemoteTaskSummary[]
+  getBuddyRoom: () => RemoteBuddyMessage[]
+  getAgentOutput: (agentId: string) => string[]
+  sendMessage: (to: string, text: string) => void
+  pauseSchedule: (id: string) => unknown
+  resumeSchedule: (id: string) => unknown
+  restartSchedule: (id: string) => unknown
+  postTask: (title: string, description: string, priority: 'low' | 'medium' | 'high') => unknown
+}
+
+export class RemoteServer {
+  private app: Application
+
+  constructor(private deps: RemoteServerDeps) {
+    this.app = express()
+    this.app.use(express.json({ limit: '4kb' }))
+    this.app.use('/r/:token', this.authMiddleware.bind(this))
+    this.registerRoutes()
+  }
+
+  getApp(): Application {
+    return this.app
+  }
+
+  private authMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const token = req.params.token
+    if (!token || !this.deps.tokenManager.isValid(token)) {
+      res.status(404).end()
+      return
+    }
+    this.deps.tokenManager.bumpActivity()
+    this.deps.tokenManager.trackSession(req.ip || 'unknown')
+    next()
+  }
+
+  private registerRoutes(): void {
+    // GET / - serves the mobile UI HTML
+    this.app.get('/r/:token/', (req: Request, res: Response) => {
+      const htmlPath = path.join(__dirname, 'static', 'index.html')
+      let html: string
+      try {
+        html = fs.readFileSync(htmlPath, 'utf-8')
+      } catch {
+        res.status(500).send('Static UI not found')
+        return
+      }
+      html = html.replace('__TOKEN_PLACEHOLDER__', req.params.token)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.send(html)
+    })
+
+    // GET /state - placeholder, real impl in Task 6
+    this.app.get('/r/:token/state', (_req: Request, res: Response) => {
+      res.json({ ok: true })
+    })
+  }
+}
