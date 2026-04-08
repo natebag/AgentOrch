@@ -93,6 +93,22 @@ export class RemoteServer {
       res.send(html)
     })
 
+    // POST /schedule/:id/{pause|resume|restart} - manage scheduled prompts
+    const scheduleAction = (
+      fn: (id: string) => unknown
+    ) => (req: Request, res: Response) => {
+      try {
+        const result = fn(req.params.id)
+        res.json(result)
+      } catch (err) {
+        res.status(400).json({ error: (err as Error).message })
+      }
+    }
+
+    this.app.post('/r/:token/schedule/:id/pause', scheduleAction((id) => this.deps.pauseSchedule(id)))
+    this.app.post('/r/:token/schedule/:id/resume', scheduleAction((id) => this.deps.resumeSchedule(id)))
+    this.app.post('/r/:token/schedule/:id/restart', scheduleAction((id) => this.deps.restartSchedule(id)))
+
     // POST /message - send a message to an agent (writes to their PTY)
     this.app.post('/r/:token/message', (req: Request, res: Response) => {
       const { to, text } = req.body ?? {}

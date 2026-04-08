@@ -199,3 +199,42 @@ describe('RemoteServer POST /message', () => {
     expect(res.body.error).toContain('agent dead')
   })
 })
+
+describe('RemoteServer POST /schedule/:id/*', () => {
+  it('pause calls deps.pauseSchedule and returns the result', async () => {
+    const pauseSchedule = vi.fn(() => ({ id: 's1', status: 'paused' }))
+    const deps = makeDeps({ pauseSchedule })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    const res = await request(server.getApp()).post(`/r/${token}/schedule/s1/pause`).expect(200)
+    expect(pauseSchedule).toHaveBeenCalledWith('s1')
+    expect(res.body.status).toBe('paused')
+  })
+
+  it('resume calls deps.resumeSchedule', async () => {
+    const resumeSchedule = vi.fn(() => ({ id: 's1', status: 'active' }))
+    const deps = makeDeps({ resumeSchedule })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    await request(server.getApp()).post(`/r/${token}/schedule/s1/resume`).expect(200)
+    expect(resumeSchedule).toHaveBeenCalledWith('s1')
+  })
+
+  it('restart calls deps.restartSchedule', async () => {
+    const restartSchedule = vi.fn(() => ({ id: 's1', status: 'active' }))
+    const deps = makeDeps({ restartSchedule })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    await request(server.getApp()).post(`/r/${token}/schedule/s1/restart`).expect(200)
+    expect(restartSchedule).toHaveBeenCalledWith('s1')
+  })
+
+  it('returns 400 if the underlying op throws', async () => {
+    const pauseSchedule = vi.fn(() => { throw new Error('not found') })
+    const deps = makeDeps({ pauseSchedule })
+    const token = deps.tokenManager.generate()
+    const server = new RemoteServer(deps)
+    const res = await request(server.getApp()).post(`/r/${token}/schedule/bad/pause`).expect(400)
+    expect(res.body.error).toContain('not found')
+  })
+})
