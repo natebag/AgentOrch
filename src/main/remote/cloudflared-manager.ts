@@ -86,7 +86,9 @@ export class CloudflaredManager {
     return new Promise((resolve, reject) => {
       let buffer = ''
       let resolved = false
-      const child = this.opts.spawnChild(this.installedPath!, ['tunnel', '--url', `http://localhost:${localPort}`])
+      // Use 127.0.0.1 explicitly — on Windows, 'localhost' can resolve to ::1 (IPv6)
+      // first, and cloudflared fails to reach the Express server bound to IPv4 only.
+      const child = this.opts.spawnChild(this.installedPath!, ['tunnel', '--url', `http://127.0.0.1:${localPort}`])
       this.child = child
 
       const onData = (chunk: Buffer | string) => {

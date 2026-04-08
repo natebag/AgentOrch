@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import QRCode from 'qrcode-svg'
 
 declare const electronAPI: {
   getSettings: () => Promise<Record<string, any>>
@@ -20,6 +21,24 @@ export function SettingsDialog({ onClose }: SettingsDialogProps): React.ReactEle
   const [settings, setSettings] = useState<Record<string, any>>({})
   const [remoteState, setRemoteState] = useState({ enabled: false, publicUrl: null as string | null, connectionCount: 0, lastActivity: null as number | null })
   const [setupProgress, setSetupProgress] = useState<{ stage: string; message?: string } | null>(null)
+  const [showQr, setShowQr] = useState(false)
+
+  const qrSvg = useMemo(() => {
+    if (!remoteState.publicUrl) return null
+    try {
+      return new QRCode({
+        content: remoteState.publicUrl,
+        padding: 2,
+        width: 220,
+        height: 220,
+        color: '#e0e0e0',
+        background: '#1e1e1e',
+        ecl: 'M'
+      }).svg()
+    } catch {
+      return null
+    }
+  }, [remoteState.publicUrl])
 
   useEffect(() => {
     electronAPI.getSettings().then(setSettings)
@@ -204,7 +223,21 @@ export function SettingsDialog({ onClose }: SettingsDialogProps): React.ReactEle
                   flex: 1, padding: '8px', backgroundColor: '#3b82f6', color: '#fff',
                   border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
                 }}>📋 Copy URL</button>
+                <button onClick={() => setShowQr(v => !v)} style={{
+                  flex: 1, padding: '8px', backgroundColor: '#444', color: '#e0e0e0',
+                  border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
+                }}>{showQr ? '✕ Hide QR' : '📱 Show QR'}</button>
               </div>
+
+              {showQr && qrSvg && (
+                <div
+                  style={{
+                    display: 'flex', justifyContent: 'center', padding: '12px',
+                    backgroundColor: '#1e1e1e', borderRadius: '4px', border: '1px solid #333'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: qrSvg }}
+                />
+              )}
 
               <div style={{ fontSize: '12px', color: '#aaa' }}>
                 {remoteState.connectionCount === 0 && '⚪ No connections'}
