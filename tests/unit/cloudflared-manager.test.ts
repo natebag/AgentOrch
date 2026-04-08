@@ -198,8 +198,6 @@ describe('CloudflaredManager.start', () => {
     expect(args).toContain('--url')
     expect(args).toContain('http://127.0.0.1:7700')
     expect(args).toContain('--config')
-    expect(args).toContain('--loglevel')
-    expect(args).toContain('debug')
   })
 
   it('rejects if cloudflared exits before printing a URL', async () => {

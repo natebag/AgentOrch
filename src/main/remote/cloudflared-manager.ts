@@ -104,23 +104,17 @@ export class CloudflaredManager {
       // Use 127.0.0.1 explicitly — on Windows, 'localhost' can resolve to ::1 (IPv6)
       // first, and cloudflared fails to reach the Express server bound to IPv4 only.
       // Also pass an empty --config so we don't inherit the user's existing
-      // ~/.cloudflared/config.yml which may route all traffic to a 404 or other tunnel.
+      // ~/.cloudflared/config.yml which may route traffic to a different tunnel or 404.
       const args = [
         'tunnel',
         '--config', this.emptyConfigPath,
-        '--url', `http://127.0.0.1:${localPort}`,
-        '--loglevel', 'debug'
+        '--url', `http://127.0.0.1:${localPort}`
       ]
-      console.log(`[cloudflared] spawning: ${this.installedPath} ${args.join(' ')}`)
       const child = this.opts.spawnChild(this.installedPath!, args)
       this.child = child
 
       const onData = (chunk: Buffer | string) => {
         const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
-        // Log EVERY line of cloudflared output so we can see tunnel behavior
-        text.split('\n').forEach(line => {
-          if (line.trim()) console.log(`[cloudflared] ${line.trim()}`)
-        })
         buffer += text
         const url = parseTunnelUrl(buffer)
         if (url && !resolved) {
@@ -132,9 +126,10 @@ export class CloudflaredManager {
       child.stderr?.on('data', onData)
 
       child.on('exit', (code) => {
-        console.log(`[cloudflared] process exited with code ${code}`)
         if (!resolved) {
           reject(new Error(`cloudflared exited with code ${code} before tunnel URL was received`))
+        } else if (code !== 0 && code !== null) {
+          console.log(`[cloudflared] process exited unexpectedly with code ${code}`)
         }
       })
     })

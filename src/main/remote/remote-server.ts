@@ -88,15 +88,8 @@ export class RemoteServer {
     this.staticDir = resolveStaticDir()
     this.app = express()
 
-    // Catch-all request logger (runs for EVERY request, no matter the path)
-    this.app.use((req, _res, next) => {
-      console.log(`[RemoteServer] INCOMING ${req.method} ${req.url} from ${req.ip}`)
-      next()
-    })
-
-    // No-auth health check — lets us verify the tunnel reaches the server
+    // No-auth health check — lets you verify the tunnel reaches the server
     this.app.get('/health', (_req, res) => {
-      console.log('[RemoteServer] HEALTH CHECK hit')
       res.status(200).type('text/plain').send('ok')
     })
 
@@ -129,11 +122,7 @@ export class RemoteServer {
 
   private authMiddleware(req: Request, res: Response, next: NextFunction): void {
     const token = req.params.token
-    const currentToken = this.deps.tokenManager.getCurrentToken()
-    // Debug logging to diagnose dev-mode routing issues
-    console.log(`[RemoteServer] ${req.method} ${req.originalUrl} — token param: ${token ? token.slice(0, 8) + '...' : 'MISSING'} — current: ${currentToken ? currentToken.slice(0, 8) + '...' : 'NONE'}`)
     if (!token || !this.deps.tokenManager.isValid(token)) {
-      console.log(`[RemoteServer] AUTH FAILED — token valid: ${token ? this.deps.tokenManager.isValid(token) : 'no-token'}`)
       res.status(404).end()
       return
     }
