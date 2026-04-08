@@ -69,6 +69,7 @@ export class RemoteServer {
     this.app.use(express.json({ limit: '4kb' }))
     this.app.use('/r/:token', this.rateLimitMiddleware.bind(this))
     this.app.use('/r/:token', this.authMiddleware.bind(this))
+    this.app.use('/r/:token', express.static(path.join(__dirname, 'static'), { index: false }))
     this.registerRoutes()
   }
 

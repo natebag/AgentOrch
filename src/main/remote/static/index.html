@@ -2,11 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <title>AgentOrch Remote</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="root">AgentOrch Remote — loading...</div>
+  <header id="header">
+    <div class="header-row">
+      <span id="connection-badge" class="badge ok">🟢 1</span>
+      <span id="project-name">Loading...</span>
+      <button id="refresh-btn" title="Refresh" aria-label="Refresh">⟳</button>
+    </div>
+    <div id="agent-summary" class="header-sub">— agents</div>
+  </header>
+
+  <main id="content">
+    <section id="agents-section" class="card-section">
+      <h2 class="section-header" data-toggle="agents-list">▼ AGENTS</h2>
+      <div id="agents-list" class="section-body"></div>
+    </section>
+
+    <section id="schedules-section" class="card-section">
+      <h2 class="section-header" data-toggle="schedules-list">▼ SCHEDULES</h2>
+      <div id="schedules-list" class="section-body"></div>
+    </section>
+
+    <section id="pinboard-section" class="card-section">
+      <h2 class="section-header" data-toggle="pinboard-list">
+        ▼ PINBOARD
+        <button id="add-task-btn" class="inline-btn">+</button>
+      </h2>
+      <div id="pinboard-list" class="section-body"></div>
+    </section>
+
+    <section id="buddy-section" class="card-section">
+      <h2 class="section-header" data-toggle="buddy-list">▼ BUDDY ROOM</h2>
+      <div id="buddy-list" class="section-body"></div>
+    </section>
+
+    <div id="status-message" class="status-message"></div>
+  </main>
+
+  <footer id="send-bar">
+    <select id="send-target" aria-label="Target agent"></select>
+    <input id="send-text" type="text" placeholder="Type a message..." />
+    <button id="send-btn">↑</button>
+  </footer>
+
+  <div id="task-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>New Task</h3>
+      <input id="task-title" placeholder="Title" />
+      <textarea id="task-description" placeholder="Description" rows="3"></textarea>
+      <div class="modal-row">
+        <label><input type="radio" name="priority" value="low"> Low</label>
+        <label><input type="radio" name="priority" value="medium" checked> Medium</label>
+        <label><input type="radio" name="priority" value="high"> High</label>
+      </div>
+      <div class="modal-actions">
+        <button id="task-cancel">Cancel</button>
+        <button id="task-submit">Post</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="disconnected-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2>🔌 Disconnected</h2>
+      <p>Remote View has been turned off or expired.</p>
+      <p>Re-enable it from AgentOrch desktop to reconnect.</p>
+    </div>
+  </div>
+
   <script>window.__TOKEN__ = '__TOKEN_PLACEHOLDER__'</script>
+  <script src="app.js"></script>
 </body>
 </html>
