@@ -39,6 +39,14 @@ declare global {
       deleteSchedule: (id: string) => Promise<unknown>
       onSchedulesUpdated: (callback: (list: unknown[]) => void) => () => void
       onSchedulerResumed: (callback: () => void) => () => void
+      // Remote View
+      enableRemoteView: () => Promise<{ ok: boolean }>
+      disableRemoteView: () => Promise<{ ok: boolean }>
+      getRemoteViewState: () => Promise<{ enabled: boolean; publicUrl: string | null; connectionCount: number; lastActivity: number | null }>
+      killRemoteSessions: () => Promise<{ ok: boolean; newUrl?: string | null }>
+      regenerateRemoteToken: () => Promise<{ ok: boolean; newUrl?: string | null }>
+      onRemoteStatusUpdate: (cb: (status: { enabled: boolean; publicUrl: string | null; connectionCount: number; lastActivity: number | null }) => void) => () => void
+      onRemoteSetupProgress: (cb: (progress: { stage: 'downloading' | 'starting' | 'ready' | 'error'; message?: string }) => void) => () => void
     }
   }
 }

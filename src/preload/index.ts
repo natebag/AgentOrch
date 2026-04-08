@@ -126,6 +126,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.SCHEDULER_RESUMED, handler)
     return () => ipcRenderer.removeListener(IPC.SCHEDULER_RESUMED, handler)
   },
+  // Remote View
+  enableRemoteView: () => ipcRenderer.invoke(IPC.REMOTE_ENABLE),
+  disableRemoteView: () => ipcRenderer.invoke(IPC.REMOTE_DISABLE),
+  getRemoteViewState: () => ipcRenderer.invoke(IPC.REMOTE_STATE),
+  killRemoteSessions: () => ipcRenderer.invoke(IPC.REMOTE_KILL_SESSIONS),
+  regenerateRemoteToken: () => ipcRenderer.invoke(IPC.REMOTE_REGENERATE),
+  onRemoteStatusUpdate: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown) => callback(status)
+    ipcRenderer.on(IPC.REMOTE_STATUS_UPDATE, handler)
+    return () => ipcRenderer.removeListener(IPC.REMOTE_STATUS_UPDATE, handler)
+  },
+  onRemoteSetupProgress: (callback: (progress: unknown) => void) => {
+    const handler = (_event: unknown, progress: unknown) => callback(progress)
+    ipcRenderer.on(IPC.REMOTE_SETUP_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC.REMOTE_SETUP_PROGRESS, handler)
+  },
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),

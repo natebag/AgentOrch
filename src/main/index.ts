@@ -1689,6 +1689,48 @@ function setupIPC(): void {
     promptScheduler.delete(id)
     return { status: 'ok' }
   })
+
+  // Remote View
+  ipcMain.handle(IPC.REMOTE_ENABLE, async () => {
+    await enableRemoteView()
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.REMOTE_DISABLE, async () => {
+    await disableRemoteView()
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.REMOTE_STATE, () => {
+    return {
+      enabled: remoteServer !== null,
+      publicUrl: remotePublicUrl,
+      connectionCount: remoteTokenManager?.getConnectionCount() ?? 0,
+      lastActivity: remoteTokenManager?.getLastActivity() ?? null
+    }
+  })
+
+  ipcMain.handle(IPC.REMOTE_KILL_SESSIONS, () => {
+    if (!remoteTokenManager) return { ok: false }
+    remoteTokenManager.killAllSessions()
+    if (remotePublicUrl) {
+      const baseUrl = remotePublicUrl.split('/r/')[0]
+      remotePublicUrl = `${baseUrl}/r/${remoteTokenManager.getCurrentToken()}/`
+    }
+    emitRemoteStatus()
+    return { ok: true, newUrl: remotePublicUrl }
+  })
+
+  ipcMain.handle(IPC.REMOTE_REGENERATE, () => {
+    if (!remoteTokenManager) return { ok: false }
+    remoteTokenManager.generate()
+    if (remotePublicUrl) {
+      const baseUrl = remotePublicUrl.split('/r/')[0]
+      remotePublicUrl = `${baseUrl}/r/${remoteTokenManager.getCurrentToken()}/`
+    }
+    emitRemoteStatus()
+    return { ok: true, newUrl: remotePublicUrl }
+  })
 }
 
 async function main(): Promise<void> {
