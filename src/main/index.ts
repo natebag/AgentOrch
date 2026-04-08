@@ -250,11 +250,16 @@ async function enableRemoteView(): Promise<void> {
     throw new Error('Failed to bind remote server')
   }
   const localPort = addr.port
+  console.log(`[RemoteView] Express bound to 127.0.0.1:${localPort}`)
 
   try {
     const baseUrl = await cloudflaredManager.start(localPort)
     remotePublicUrl = `${baseUrl}/r/${token}/`
+    console.log(`[RemoteView] Cloudflared tunnel up: ${baseUrl} -> 127.0.0.1:${localPort}`)
+    console.log(`[RemoteView] Full URL (copy to phone): ${remotePublicUrl}`)
+    console.log(`[RemoteView] Test without auth: ${baseUrl}/health`)
   } catch (err) {
+    console.log(`[RemoteView] Tunnel failed: ${(err as Error).message}`)
     emitRemoteSetupProgress({ stage: 'error', message: `tunnel failed: ${(err as Error).message}` })
     await disableRemoteView()
     return

@@ -66,6 +66,19 @@ export class RemoteServer {
 
   constructor(private deps: RemoteServerDeps) {
     this.app = express()
+
+    // Catch-all request logger (runs for EVERY request, no matter the path)
+    this.app.use((req, _res, next) => {
+      console.log(`[RemoteServer] INCOMING ${req.method} ${req.url} from ${req.ip}`)
+      next()
+    })
+
+    // No-auth health check — lets us verify the tunnel reaches the server
+    this.app.get('/health', (_req, res) => {
+      console.log('[RemoteServer] HEALTH CHECK hit')
+      res.status(200).type('text/plain').send('ok')
+    })
+
     this.app.use(express.json({ limit: '4kb' }))
     this.app.use('/r/:token', this.rateLimitMiddleware.bind(this))
     this.app.use('/r/:token', this.authMiddleware.bind(this))
