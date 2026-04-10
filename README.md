@@ -11,7 +11,7 @@ Agents communicate through 25+ MCP tools — messaging, task boards, shared know
 - **25+ MCP tools** — agents message each other, post tasks, share research, read/write files, and more.
 - **Multi-model teams** — Claude, Codex, Kimi, Gemini, Copilot, Grok, OpenClaude (200+ models via OpenAI-compatible providers), or plain terminals.
 - **Scheduled prompts** — fire recurring prompts at any agent on a custom interval and duration. Pause/resume, run indefinitely, auto-resume on restart. Perfect for overnight "keep going" nudges.
-- **Remote View** *(experimental)* — tunnel your workshop to a public URL via Cloudflare. Check agent status, read the buddy room, send messages, manage schedules, and post tasks from your phone. No port forwarding required.
+- **Remote View** *(experimental)* — tunnel your workshop to a public URL via Cloudflare. Check agent status, send messages, manage schedules, and post tasks from your phone. No port forwarding required.
 - **39 preset templates** — pre-built team configurations. Search + filter by available CLIs.
 - **Skills system** — composable capability modules. Attach "Code Reviewer" + "Security Auditor" + "TypeScript Expert" to an agent. 15 built-in, create your own, browse 90k+ community skills.
 - **File Explorer + Monaco Editor** — browse project files, edit with VS Code's engine, syntax highlighting, tabs.
@@ -115,7 +115,7 @@ Agents get 25+ MCP tools:
 | **Info** | `post_info`, `read_info`, `update_info`, `delete_info` |
 | **Agents** | `get_agents`, `read_ceo_notes`, `update_status`, `get_agent_output`, `get_my_group` |
 | **Files** | `read_file`, `write_file`, `list_directory` |
-| **Other** | `read_buddy_room` |
+| **Other** | — |
 
 **Auto-nudge:** Agents don't poll — they wait. When a message arrives or a task is posted, the matching agent gets nudged automatically. Tasks with `target_role` only nudge agents with that role. Zero wasted tokens.
 
@@ -170,7 +170,6 @@ Check on your AgentOrch workshop from your phone. Open **Settings → Remote Vie
 - 💬 Send messages to any agent (writes directly to their PTY)
 - 📅 Pause / resume / restart any scheduled prompt
 - 📌 Post new tasks to the pinboard
-- 👥 See the buddy room (agents chatting with each other)
 - 🔴 Live connection count — turns red if more than one person is connected
 
 **Security:**
@@ -193,7 +192,6 @@ Electron App
 │   ├── Message Router (peek/ack, rate limiting, group + tab scoping)
 │   ├── Pinboard (task management with role targeting)
 │   ├── Info Channel (shared knowledge)
-│   ├── Buddy Room (companion speech log)
 │   ├── Group Manager (communication graph)
 │   ├── Agent Metrics (activity tracking)
 │   └── File Operations (project-scoped)
@@ -214,7 +212,7 @@ Electron App
     ├── Monaco Editor + file explorer
     ├── Git panel
     ├── Schedules panel
-    ├── 9 toggleable panels
+    ├── 8 toggleable panels
     └── 39 preset templates with search/filter
 ```
 

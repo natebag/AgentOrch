@@ -305,7 +305,7 @@ Skills are composable prompt modules that enhance agent capabilities. Instead of
 
 ## UI Panels
 
-The workspace has 9+ toggleable panels (from the TopBar Panels dropdown). Each panel is a floating, draggable, resizable window on the infinite canvas alongside agent terminals. Panels are tab-scoped — switching workspace tabs shows that tab's own panel state.
+The workspace has 8+ toggleable panels (from the TopBar Panels dropdown). Each panel is a floating, draggable, resizable window on the infinite canvas alongside agent terminals. Panels are tab-scoped — switching workspace tabs shows that tab's own panel state.
 
 | Panel | What it shows |
 |-------|--------------|
