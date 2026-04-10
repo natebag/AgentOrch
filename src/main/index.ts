@@ -206,12 +206,6 @@ async function enableRemoteView(): Promise<void> {
           id: t.id, title: t.title, priority: t.priority, status: t.status, claimedBy: t.claimedBy
         }))
     },
-    getBuddyRoom: () => {
-      if (!hub) return []
-      return hub.buddyRoom.getMessages().slice(-50).map(m => ({
-        timestamp: m.timestamp, agentName: m.agentName, message: m.message
-      }))
-    },
     getAgentOutput: (agentId: string) => {
       const managed = agents.get(agentId)
       if (!managed) return []
@@ -570,9 +564,6 @@ function reconnectAgent(config: AgentConfig): void {
     onClearDetected: () => {
       // Allow re-injection on next 'active' status
       hasReceivedInitialPrompt.delete(config.id)
-    },
-    onBuddyDetected: (detection) => {
-      hub.buddyRoom.addMessage(config.name, detection.buddyName, detection.message)
     }
   })
 
@@ -929,10 +920,6 @@ async function openProject(projectPath: string): Promise<void> {
     hub.agentMetrics.increment(entry.from, 'infoPosted')
   }
 
-  hub.buddyRoom.onMessageAdded = (_msg) => {
-    mainWindow?.webContents.send(IPC.BUDDY_MESSAGE_ADDED, hub.buddyRoom.getMessages())
-  }
-
   hub.setOutputAccessor((agentName, lines) => {
     const managed = Array.from(agents.values()).find(a => a.config.name === agentName)
     if (!managed) return null
@@ -1124,9 +1111,6 @@ function setupIPC(): void {
       onClearDetected: () => {
         // Allow re-injection on next 'active' status
         hasReceivedInitialPrompt.delete(config.id)
-      },
-      onBuddyDetected: (detection) => {
-        hub.buddyRoom.addMessage(config.name, detection.buddyName, detection.message)
       }
     })
 
@@ -1248,11 +1232,6 @@ function setupIPC(): void {
   // Info Channel IPC handlers
   ipcMain.handle(IPC.INFO_GET_ENTRIES, (_event, tabId?: string) => {
     return tabId ? hub.infoChannel.readInfoForTab(tabId) : hub.infoChannel.readInfo()
-  })
-
-  // Buddy Room IPC handlers
-  ipcMain.handle(IPC.BUDDY_GET_MESSAGES, () => {
-    return hub?.buddyRoom.getMessages() ?? []
   })
 
   // Group IPC

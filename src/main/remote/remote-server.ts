@@ -39,19 +39,12 @@ export interface RemoteTaskSummary {
   claimedBy: string | null
 }
 
-export interface RemoteBuddyMessage {
-  timestamp: string
-  agentName: string
-  message: string
-}
-
 export interface RemoteServerDeps {
   tokenManager: TokenManager
   getProjectName: () => string
   getAgents: () => RemoteAgentSummary[]
   getSchedules: () => RemoteScheduleSummary[]
   getPinboardTasks: () => RemoteTaskSummary[]
-  getBuddyRoom: () => RemoteBuddyMessage[]
   getAgentOutput: (agentId: string) => string[]
   sendMessage: (to: string, text: string) => void
   pauseSchedule: (id: string) => unknown
@@ -220,7 +213,6 @@ export class RemoteServer {
         agents: this.deps.getAgents(),
         schedules: this.deps.getSchedules(),
         pinboardTasks: this.deps.getPinboardTasks(),
-        buddyRoom: this.deps.getBuddyRoom(),
         connectionCount: this.deps.tokenManager.getConnectionCount(),
         serverTime: Date.now()
       }

@@ -273,22 +273,6 @@ const CATEGORIES: ToolCategory[] = [
       },
     ],
   },
-  {
-    id: 'companion',
-    label: 'Companion / Buddy',
-    description: 'The buddy room collects companion speech detected in agent terminals.',
-    tools: [
-      {
-        name: 'read_buddy_room',
-        description: 'Read recent companion/buddy speech from all agent terminals.',
-        args: [
-          { name: 'count', type: 'number', description: 'Number of recent messages (default 20, max 200)' },
-        ],
-        example: 'read_buddy_room(count=50)',
-        roles: ['all'],
-      },
-    ],
-  },
 ]
 
 const ROLE_COLORS: Record<ToolRole, string> = {

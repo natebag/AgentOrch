@@ -84,8 +84,6 @@ export const IPC = {
   PINBOARD_TASK_UPDATE: 'pinboard:task-update',
   INFO_GET_ENTRIES: 'info:get-entries',
   INFO_ENTRY_ADDED: 'info:entry-added',
-  BUDDY_GET_MESSAGES: 'buddy:get-messages',
-  BUDDY_MESSAGE_ADDED: 'buddy:message-added',
   PROJECT_GET_CURRENT: 'project:get-current',
   PROJECT_SWITCH: 'project:switch',
   PROJECT_LIST_RECENT: 'project:list-recent',
@@ -159,14 +157,6 @@ export const IPC = {
   REMOTE_STATUS_UPDATE: 'remote:status-update',
   REMOTE_SETUP_PROGRESS: 'remote:setup-progress',
 } as const
-
-export interface BuddyMessage {
-  id: string
-  agentName: string
-  buddyName: string
-  message: string
-  timestamp: string
-}
 
 export interface Skill {
   id: string

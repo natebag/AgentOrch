@@ -6,7 +6,6 @@ import { Pinboard } from './pinboard'
 import { InfoChannel } from './info-channel'
 import { generateSecret, validateSecret } from './auth'
 import { createRoutes, type OutputAccessor } from './routes'
-import { BuddyRoom } from './buddy-room'
 import { GroupManager } from './group-manager'
 import { AgentMetrics } from './agent-metrics'
 import type { MessageStore } from '../db/message-store'
@@ -18,7 +17,6 @@ export interface HubServer {
   messages: MessageRouter
   pinboard: Pinboard
   infoChannel: InfoChannel
-  buddyRoom: BuddyRoom
   groupManager: GroupManager
   agentMetrics: AgentMetrics
   setOutputAccessor: (fn: OutputAccessor) => void
@@ -37,7 +35,6 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     const messages = new MessageRouter(registry, groupManager, agentMetrics)
     const pinboard = new Pinboard()
     const infoChannel = new InfoChannel()
-    const buddyRoom = new BuddyRoom()
 
     app.use(express.json())
 
@@ -53,7 +50,7 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
     const outputRef: { accessor: OutputAccessor | null } = { accessor: null }
     const messageStoreRef: { store: MessageStore | null } = { store: null }
     const projectPathRef: { path: string | null } = { path: null }
-    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel, messageStoreRef, buddyRoom, projectPathRef, groupManager))
+    app.use(createRoutes(registry, messages, outputRef, pinboard, infoChannel, messageStoreRef, projectPathRef, groupManager))
 
     const server: Server = app.listen(preferredPort, '127.0.0.1', () => {
       const addr = server.address()
@@ -68,7 +65,6 @@ export function createHubServer(preferredPort = 0): Promise<HubServer> {
         messages,
         pinboard,
         infoChannel,
-        buddyRoom,
         groupManager,
         agentMetrics,
         setOutputAccessor: (fn) => { outputRef.accessor = fn },

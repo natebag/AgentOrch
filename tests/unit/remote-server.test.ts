@@ -10,7 +10,6 @@ function makeDeps(overrides: Partial<RemoteServerDeps> = {}): RemoteServerDeps {
     getAgents: () => [],
     getSchedules: () => [],
     getPinboardTasks: () => [],
-    getBuddyRoom: () => [],
     getAgentOutput: () => [],
     sendMessage: vi.fn(),
     pauseSchedule: vi.fn(),
@@ -97,9 +96,6 @@ describe('RemoteServer GET /state', () => {
       ],
       getPinboardTasks: () => [
         { id: 't1', title: 'Fix bug', priority: 'high', status: 'open', claimedBy: null }
-      ],
-      getBuddyRoom: () => [
-        { timestamp: '2026-04-08T12:00:00Z', agentName: 'Worker1', message: 'Done' }
       ]
     })
     const token = deps.tokenManager.generate()
@@ -111,7 +107,6 @@ describe('RemoteServer GET /state', () => {
     expect(res.body.agents[0].name).toBe('Orchestrator')
     expect(res.body.schedules).toHaveLength(1)
     expect(res.body.pinboardTasks).toHaveLength(1)
-    expect(res.body.buddyRoom).toHaveLength(1)
     expect(typeof res.body.connectionCount).toBe('number')
     expect(typeof res.body.serverTime).toBe('number')
   })

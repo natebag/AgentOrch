@@ -23,8 +23,6 @@ interface TopBarProps {
   onTogglePinboard: () => void
   infoOpen: boolean
   onToggleInfo: () => void
-  buddyOpen: boolean
-  onToggleBuddy: () => void
   filesOpen: boolean
   onToggleFiles: () => void
   racOpen: boolean
@@ -111,7 +109,7 @@ export function TopBar({
   projectName, onSwitchProject, agents, onSpawnClick, onAgentClick,
   onClearContext, onDisconnectAgent, onKillAgent,
   pinboardOpen, onTogglePinboard, infoOpen, onToggleInfo,
-  buddyOpen, onToggleBuddy, filesOpen, onToggleFiles,
+  filesOpen, onToggleFiles,
   racOpen, onToggleRac, usageOpen, onToggleUsage,
   gitOpen, onToggleGit, schedulesOpen, onToggleSchedules,
   onPresetsClick, onBugReport, onSettingsClick, onHelpMcpToolsClick,
@@ -144,7 +142,7 @@ export function TopBar({
   const hoverIn = (e: React.MouseEvent) => (e.currentTarget.style.backgroundColor = '#333')
   const hoverOut = (e: React.MouseEvent) => (e.currentTarget.style.backgroundColor = 'transparent')
 
-  const activePanelCount = [pinboardOpen, infoOpen, buddyOpen, filesOpen, racOpen, usageOpen, gitOpen, schedulesOpen].filter(Boolean).length
+  const activePanelCount = [pinboardOpen, infoOpen, filesOpen, racOpen, usageOpen, gitOpen, schedulesOpen].filter(Boolean).length
 
   return (
     <div style={{
@@ -280,7 +278,6 @@ export function TopBar({
                 { label: `${filesOpen ? '\u25CF ' : '  '}Files`, onClick: onToggleFiles, color: filesOpen ? '#8cc4ff' : '#888' },
                 { label: `${pinboardOpen ? '\u25CF ' : '  '}Pinboard`, onClick: onTogglePinboard, color: pinboardOpen ? '#8cc4ff' : '#888' },
                 { label: `${infoOpen ? '\u25CF ' : '  '}Info Channel`, onClick: onToggleInfo, color: infoOpen ? '#8cc4ff' : '#888' },
-                { label: `${buddyOpen ? '\u25CF ' : '  '}Buddy Room`, onClick: onToggleBuddy, color: buddyOpen ? '#8cc4ff' : '#888' },
                 { label: `${usageOpen ? '\u25CF ' : '  '}Usage`, onClick: onToggleUsage, color: usageOpen ? '#8cc4ff' : '#888' },
                 { label: `${racOpen ? '\u25CF ' : '  '}R.A.C.`, onClick: onToggleRac, color: racOpen ? '#8cc4ff' : '#888', divider: true },
                 { label: `${schedulesOpen ? '\u25CF ' : '  '}Schedules`, onClick: onToggleSchedules, color: schedulesOpen ? '#8cc4ff' : '#888' },

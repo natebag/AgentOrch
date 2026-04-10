@@ -19,7 +19,6 @@ describe('Remote server end-to-end flow', () => {
       getPinboardTasks: () => postedTasks.map((t, i) => ({
         id: `t${i}`, title: t.title, priority: t.priority, status: 'open', claimedBy: null
       })),
-      getBuddyRoom: () => [],
       getAgentOutput: (_id: string) => ['line1', 'line2'],
       sendMessage: (to: string, text: string) => { sentMessages.push({ to, text }) },
       pauseSchedule: vi.fn(),

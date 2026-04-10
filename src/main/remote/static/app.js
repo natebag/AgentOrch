@@ -53,7 +53,6 @@
     renderAgents(state.agents)
     renderSchedules(state.schedules)
     renderPinboard(state.pinboardTasks)
-    renderBuddyRoom(state.buddyRoom)
     renderSendTargets(state.agents)
   }
 
@@ -173,20 +172,6 @@
           <div>${escapeHtml(t.title)}</div>
           ${t.claimedBy ? `<div style="color:#888;font-size:11px">claimed by ${escapeHtml(t.claimedBy)}</div>` : ''}
         </div>
-      </div>
-    `).join('')
-  }
-
-  function renderBuddyRoom(messages) {
-    const container = $('buddy-list')
-    if (messages.length === 0) {
-      container.innerHTML = '<div style="color:#666;font-size:12px;font-style:italic">No messages</div>'
-      return
-    }
-    container.innerHTML = messages.slice(-20).map(m => `
-      <div class="buddy-msg">
-        <div class="agent-name">${escapeHtml(m.agentName)}</div>
-        <div>${escapeHtml(m.message)}</div>
       </div>
     `).join('')
   }

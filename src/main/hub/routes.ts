@@ -5,7 +5,6 @@ import type { AgentRegistry } from './agent-registry'
 import type { MessageRouter } from './message-router'
 import type { Pinboard } from './pinboard'
 import type { InfoChannel } from './info-channel'
-import type { BuddyRoom } from './buddy-room'
 import type { GroupManager } from './group-manager'
 import type { AgentConfig } from '../../shared/types'
 import type { MessageStore } from '../db/message-store'
@@ -19,7 +18,6 @@ export function createRoutes(
   pinboard: Pinboard,
   infoChannel: InfoChannel,
   messageStoreRef: { store: MessageStore | null } = { store: null },
-  buddyRoom?: BuddyRoom,
   projectPathRef: { path: string | null } = { path: null },
   groupManager?: GroupManager
 ): Router {
@@ -345,17 +343,6 @@ export function createRoutes(
     } catch (err: any) {
       res.status(500).json({ error: 'File operation failed' })
     }
-  })
-
-  // --- Buddy Room route ---
-
-  router.get('/buddy-room', (req: Request, res: Response) => {
-    if (!buddyRoom) {
-      res.json([])
-      return
-    }
-    const count = Math.min(Math.max(Number(req.query.count) || 50, 1), 200)
-    res.json(buddyRoom.getMessages(count))
   })
 
   // --- Group routes ---

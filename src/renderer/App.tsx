@@ -21,7 +21,6 @@ declare const electronAPI: {
 
 const PINBOARD_ID = '__pinboard__'
 const INFO_ID = '__info__'
-const BUDDY_ID = '__buddy__'
 const FILES_ID = '__files__'
 const RAC_ID = '__rac__'
 const USAGE_ID = '__usage__'
@@ -29,7 +28,7 @@ const GIT_ID = '__git__'
 const SCHEDULES_ID = '__schedules__'
 
 // Helpers for per-tab panel isolation
-const PANEL_PREFIXES = [PINBOARD_ID, INFO_ID, BUDDY_ID, FILES_ID, RAC_ID, USAGE_ID, GIT_ID, SCHEDULES_ID]
+const PANEL_PREFIXES = [PINBOARD_ID, INFO_ID, FILES_ID, RAC_ID, USAGE_ID, GIT_ID, SCHEDULES_ID]
 const panelIdForTab = (base: string, tabId: string): string => `${base}::${tabId}`
 const isPanelWindow = (id: string): boolean => PANEL_PREFIXES.some(p => id === p || id.startsWith(p + '::'))
 
@@ -59,7 +58,6 @@ export function App(): React.ReactElement {
 
   const pinboardOpen = tabWindows.some(w => w.id === panelIdForTab(PINBOARD_ID, activeTabId))
   const infoOpen = tabWindows.some(w => w.id === panelIdForTab(INFO_ID, activeTabId))
-  const buddyOpen = tabWindows.some(w => w.id === panelIdForTab(BUDDY_ID, activeTabId))
   const filesOpen = tabWindows.some(w => w.id === panelIdForTab(FILES_ID, activeTabId))
   const racOpen = tabWindows.some(w => w.id === panelIdForTab(RAC_ID, activeTabId))
   const usageOpen = tabWindows.some(w => w.id === panelIdForTab(USAGE_ID, activeTabId))
@@ -139,11 +137,6 @@ export function App(): React.ReactElement {
     const id = panelIdForTab(INFO_ID, activeTabId)
     if (infoOpen) { removeWindow(id) } else { addWindow(id, 'Info Channel', undefined, activeTabId) }
   }, [infoOpen, addWindow, removeWindow, activeTabId])
-
-  const toggleBuddy = useCallback(() => {
-    const id = panelIdForTab(BUDDY_ID, activeTabId)
-    if (buddyOpen) { removeWindow(id) } else { addWindow(id, 'Buddy Room', undefined, activeTabId) }
-  }, [buddyOpen, addWindow, removeWindow, activeTabId])
 
   const toggleFiles = useCallback(() => {
     const id = panelIdForTab(FILES_ID, activeTabId)
@@ -314,8 +307,6 @@ export function App(): React.ReactElement {
             onTogglePinboard={togglePinboard}
             infoOpen={infoOpen}
             onToggleInfo={toggleInfo}
-            buddyOpen={buddyOpen}
-            onToggleBuddy={toggleBuddy}
             filesOpen={filesOpen}
             onToggleFiles={toggleFiles}
             racOpen={racOpen}
@@ -391,7 +382,6 @@ export function App(): React.ReactElement {
                 const panelTitleToId: Record<string, string> = {
                   'Pinboard': PINBOARD_ID,
                   'Info Channel': INFO_ID,
-                  'Buddy Room': BUDDY_ID,
                   'Files': FILES_ID,
                   'R.A.C.': RAC_ID,
                   'Usage': USAGE_ID,

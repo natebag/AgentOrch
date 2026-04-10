@@ -5,7 +5,6 @@ import { SnapPreview } from './SnapPreview'
 import { TerminalWindow } from './TerminalWindow'
 import { PinboardPanel } from './PinboardPanel'
 import { InfoChannelPanel } from './InfoChannelPanel'
-import { BuddyRoomPanel } from './BuddyRoomPanel'
 import { FilePanel } from './FilePanel'
 import { RacPanel } from './RacPanel'
 import { UsagePanel } from './UsagePanel'
@@ -20,7 +19,6 @@ import type { SnapBounds, SnapZoneInfo, WindowBounds } from '../hooks/useSnapZon
 const PANEL_IDS: Record<string, string> = {
   '__pinboard__': 'pinboard',
   '__info__': 'info',
-  '__buddy__': 'buddy',
   '__files__': 'files',
   '__rac__': 'rac',
   '__usage__': 'usage',
@@ -338,8 +336,6 @@ export function Workspace({
             content = <PinboardPanel tabId={activeTabId} />
           } else if (panelType === 'info') {
             content = <InfoChannelPanel tabId={activeTabId} />
-          } else if (panelType === 'buddy') {
-            content = <BuddyRoomPanel />
           } else if (panelType === 'files') {
             content = <FilePanel />
           } else if (panelType === 'rac') {
