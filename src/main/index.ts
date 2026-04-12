@@ -25,7 +25,8 @@ import { TokenManager } from './remote/token-manager'
 import { CloudflaredManager } from './remote/cloudflared-manager'
 import { RemoteServer } from './remote/remote-server'
 import * as communityClient from './community/community-client'
-import type { AgentConfig, RemoteSetupProgress, CommunityAgent, CommunityCategory } from '../shared/types'
+import * as themesStore from './themes/themes-store'
+import type { AgentConfig, AgentTheme, RemoteSetupProgress, CommunityAgent, CommunityCategory } from '../shared/types'
 import { IPC } from '../shared/types'
 
 let hub: HubServer
@@ -1026,6 +1027,13 @@ function setupIPC(): void {
   })
 
   ipcMain.handle(IPC.SPAWN_AGENT, (_event, config: AgentConfig) => {
+    // Apply persisted theme for this agent (if any) — preserves explicit override from preset
+    const projectPath = projectManager.currentProject?.path
+    if (!config.theme && projectPath) {
+      const savedTheme = themesStore.getTheme(projectPath, config.name)
+      if (savedTheme) config.theme = savedTheme
+    }
+
     const mcpServerPath = getMcpServerPath()
     const mcpConfigPath = writeAgentMcpConfig({
       agentId: config.id,
@@ -1665,6 +1673,29 @@ function setupIPC(): void {
     }
   })
 
+  // Per-agent theme — updates the in-memory config, persists to disk, broadcasts state
+  ipcMain.handle(IPC.AGENT_SET_THEME, (_event, agentId: string, theme: AgentTheme | null) => {
+    const managed = agents.get(agentId)
+    if (!managed) return { success: false, error: 'Agent not found' }
+    if (theme === null) {
+      delete managed.config.theme
+    } else {
+      managed.config.theme = theme
+    }
+    // Also update the hub registry so any other consumers (Remote View, etc.) see the change
+    const registered = hub.registry.get(managed.config.name)
+    if (registered) {
+      if (theme === null) delete registered.theme
+      else registered.theme = theme
+    }
+    // Persist to themes.json keyed by current project path
+    const projectPath = projectManager.currentProject?.path
+    if (projectPath) themesStore.setTheme(projectPath, managed.config.name, theme)
+    // Broadcast to all renderers so the window re-renders with the new theme
+    mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    return { success: true }
+  })
+
   // Tab IPC
   ipcMain.handle(IPC.TAB_GET_ALL, () => Array.from(workspaceTabs.values()))
 
@@ -1793,6 +1824,9 @@ async function main(): Promise<void> {
   // Global presets directory — follows user across projects
   const globalPresetsDir = path.join(app.getPath('userData'), 'presets')
   setPresetsDir(globalPresetsDir)
+
+  // Per-agent theme persistence — keyed by project path + agent name
+  themesStore.setThemesPath(path.join(app.getPath('userData'), 'themes.json'))
 
   // Skills: built-in from app resources, user skills in userData
   const builtInSkillsDir = app.isPackaged

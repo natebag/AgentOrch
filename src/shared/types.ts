@@ -1,5 +1,14 @@
 export type AgentStatus = 'idle' | 'active' | 'working' | 'disconnected'
 
+// Per-agent visual theme — colors customize the window chrome and terminal.
+// Any field can be omitted to fall back to the default. Sharing-safe (no PII).
+export interface AgentTheme {
+  chrome?: string  // window title bar background color
+  border?: string  // window outline color
+  bg?: string      // terminal content area background color
+  text?: string    // terminal default text color (ANSI sequences still override)
+}
+
 export interface AgentConfig {
   id: string
   name: string
@@ -17,6 +26,7 @@ export interface AgentConfig {
   skills?: string[]  // skill IDs attached to this agent
   groupId?: string
   tabId?: string  // workspace tab this agent belongs to
+  theme?: AgentTheme  // optional per-agent color theme
 }
 
 export interface AgentState extends AgentConfig {
@@ -89,6 +99,7 @@ export const IPC = {
   COMMUNITY_GET: 'community:get',
   COMMUNITY_SHARE: 'community:share',
   COMMUNITY_TOGGLE_STAR: 'community:toggle-star',
+  AGENT_SET_THEME: 'agent:set-theme',
   INFO_GET_ENTRIES: 'info:get-entries',
   INFO_ENTRY_ADDED: 'info:entry-added',
   PROJECT_GET_CURRENT: 'project:get-current',

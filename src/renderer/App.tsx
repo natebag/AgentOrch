@@ -413,7 +413,7 @@ export function App(): React.ReactElement {
             <BugReportDialog onClose={() => setShowBugReport(false)} />
           )}
           {showSettings && (
-            <SettingsDialog onClose={() => setShowSettings(false)} />
+            <SettingsDialog onClose={() => setShowSettings(false)} agents={agents} />
           )}
           {showHelpMcpTools && (
             <HelpDialog onClose={() => setShowHelpMcpTools(false)} />

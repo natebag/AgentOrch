@@ -2,12 +2,15 @@ import React, { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import type { AgentTheme } from '../../shared/types'
+import { resolveTheme } from '../themes'
 
 interface TerminalWindowProps {
   agentId: string
+  theme?: AgentTheme
 }
 
-export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactElement {
+export function TerminalWindow({ agentId, theme }: TerminalWindowProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -15,11 +18,12 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
   useEffect(() => {
     if (!containerRef.current) return
 
+    const resolved = resolveTheme(theme)
     const term = new Terminal({
       theme: {
-        background: '#0d0d0d',
-        foreground: '#e0e0e0',
-        cursor: '#e0e0e0',
+        background: resolved.bg,
+        foreground: resolved.text,
+        cursor: resolved.text,
         selectionBackground: '#444'
       },
       fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
@@ -82,11 +86,24 @@ export function TerminalWindow({ agentId }: TerminalWindowProps): React.ReactEle
     }
   }, [agentId])
 
+  // Live-update xterm theme when the prop changes — don't re-create the terminal
+  useEffect(() => {
+    if (!termRef.current) return
+    const resolved = resolveTheme(theme)
+    termRef.current.options.theme = {
+      background: resolved.bg,
+      foreground: resolved.text,
+      cursor: resolved.text,
+      selectionBackground: '#444'
+    }
+  }, [theme])
+
+  const resolved = resolveTheme(theme)
   return (
     <div
       ref={containerRef}
       onWheel={(e) => e.stopPropagation()}
-      style={{ width: '100%', height: '100%', backgroundColor: '#0d0d0d' }}
+      style={{ width: '100%', height: '100%', backgroundColor: resolved.bg }}
     />
   )
 }

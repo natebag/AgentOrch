@@ -349,7 +349,7 @@ export function Workspace({
           } else if (agent && agent.name.startsWith('rac-')) {
             content = <RacAgentChat agentName={agent.name} />
           } else {
-            content = <TerminalWindow agentId={win.id} />
+            content = <TerminalWindow agentId={win.id} theme={agent?.theme} />
           }
 
           const otherWindows: WindowBounds[] = windows
@@ -393,6 +393,8 @@ export function Workspace({
                 isAgent={!!agent}
                 groupColor={agent ? groups.find(g => g.members.includes(agent.name))?.color : undefined}
                 onLinkDragStart={agent ? (e: React.MouseEvent) => handleLinkDragStart(agent.name, e) : undefined}
+                theme={agent?.theme}
+                agentId={agent?.id}
               >
                 {content}
               </FloatingWindow>

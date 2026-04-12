@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import QRCode from 'qrcode-svg'
+import type { AgentState } from '../../shared/types'
+import { ROLE_THEME_DEFAULTS, getPresetById, THEME_PRESETS } from '../themes'
 
 declare const electronAPI: {
   getSettings: () => Promise<Record<string, any>>
@@ -15,9 +17,38 @@ declare const electronAPI: {
 
 interface SettingsDialogProps {
   onClose: () => void
+  agents?: AgentState[]
 }
 
-export function SettingsDialog({ onClose }: SettingsDialogProps): React.ReactElement {
+export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): React.ReactElement {
+  const [themeApplyMsg, setThemeApplyMsg] = useState<string | null>(null)
+
+  const applyThemeByRole = async () => {
+    let applied = 0
+    for (const agent of agents) {
+      const presetId = ROLE_THEME_DEFAULTS[agent.role]
+      if (!presetId) continue
+      const preset = getPresetById(presetId)
+      if (!preset) continue
+      await window.electronAPI.setAgentTheme(agent.id, preset.theme)
+      applied++
+    }
+    setThemeApplyMsg(`Applied themes to ${applied} agent${applied !== 1 ? 's' : ''}`)
+    setTimeout(() => setThemeApplyMsg(null), 2500)
+  }
+
+  const clearAllThemes = async () => {
+    let cleared = 0
+    for (const agent of agents) {
+      if (agent.theme) {
+        await window.electronAPI.setAgentTheme(agent.id, null)
+        cleared++
+      }
+    }
+    setThemeApplyMsg(`Cleared themes from ${cleared} agent${cleared !== 1 ? 's' : ''}`)
+    setTimeout(() => setThemeApplyMsg(null), 2500)
+  }
+
   const [settings, setSettings] = useState<Record<string, any>>({})
   const [remoteState, setRemoteState] = useState({ enabled: false, publicUrl: null as string | null, connectionCount: 0, lastActivity: null as number | null })
   const [setupProgress, setSetupProgress] = useState<{ stage: string; message?: string } | null>(null)
@@ -167,6 +198,60 @@ export function SettingsDialog({ onClose }: SettingsDialogProps): React.ReactEle
               }} />
             </div>
           </label>
+        </div>
+
+        {/* Themes section */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+          <div style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Agent Themes
+          </div>
+          <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.5' }}>
+            Right-click any terminal title bar to customize colors.
+            Or apply role-based defaults to all current agents at once:
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {Object.entries(ROLE_THEME_DEFAULTS).map(([role, presetId]) => {
+              const preset = getPresetById(presetId)
+              if (!preset) return null
+              return (
+                <span key={role} style={{
+                  fontSize: '10px',
+                  padding: '3px 8px',
+                  borderRadius: '10px',
+                  backgroundColor: preset.theme.chrome,
+                  border: `1px solid ${preset.theme.border}`,
+                  color: preset.theme.text
+                }}>
+                  {role} {preset.emoji}
+                </span>
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={applyThemeByRole}
+              disabled={agents.length === 0}
+              style={{
+                flex: 1, padding: '8px', backgroundColor: '#3b82f6', color: '#fff',
+                border: 'none', borderRadius: '4px', cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '12px', opacity: agents.length === 0 ? 0.5 : 1
+              }}
+            >🎨 Apply theme by role</button>
+            <button
+              onClick={clearAllThemes}
+              disabled={agents.length === 0}
+              style={{
+                padding: '8px 12px', backgroundColor: '#444', color: '#e0e0e0',
+                border: 'none', borderRadius: '4px', cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
+                fontSize: '12px', opacity: agents.length === 0 ? 0.5 : 1
+              }}
+            >Clear all</button>
+          </div>
+          {themeApplyMsg && (
+            <div style={{ fontSize: '11px', color: '#6ee7b7', padding: '4px 8px', backgroundColor: '#1a2e1a', borderRadius: '4px' }}>
+              {themeApplyMsg}
+            </div>
+          )}
         </div>
 
         {/* Remote View section */}

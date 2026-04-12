@@ -50,6 +50,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   communityGet: (issueNumber: number) => ipcRenderer.invoke(IPC.COMMUNITY_GET, issueNumber),
   communityShare: (input: unknown) => ipcRenderer.invoke(IPC.COMMUNITY_SHARE, input),
   communityToggleStar: (issueNumber: number) => ipcRenderer.invoke(IPC.COMMUNITY_TOGGLE_STAR, issueNumber),
+  // Per-agent theme
+  setAgentTheme: (agentId: string, theme: unknown) => ipcRenderer.invoke(IPC.AGENT_SET_THEME, agentId, theme),
   getInfoEntries: (tabId?: string) => ipcRenderer.invoke(IPC.INFO_GET_ENTRIES, tabId),
   onInfoUpdate: (callback: (entries: unknown[]) => void) => {
     const handler = (_event: unknown, entries: unknown[]) => callback(entries)

@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Rnd, type DraggableData, type RndDragEvent } from 'react-rnd'
 import { getSnapZone, getWindowSnap, type SnapBounds, type SnapZoneInfo, type WindowBounds } from '../hooks/useSnapZones'
+import type { AgentTheme } from '../../shared/types'
+import { THEME_PRESETS, resolveTheme } from '../themes'
 
 interface FloatingWindowProps {
   id: string
@@ -32,6 +34,8 @@ interface FloatingWindowProps {
   isAgent?: boolean
   groupColor?: string
   onLinkDragStart?: (e: React.MouseEvent) => void
+  theme?: AgentTheme
+  agentId?: string
   children: React.ReactNode
 }
 
@@ -64,9 +68,32 @@ export function FloatingWindow({
   isAgent,
   groupColor,
   onLinkDragStart,
+  theme,
+  agentId,
   children
 }: FloatingWindowProps): React.ReactElement | null {
   const [dragSizeOverride, setDragSizeOverride] = useState<{ width: number; height: number } | null>(null)
+  const [themeMenu, setThemeMenu] = useState<{ x: number; y: number } | null>(null)
+  const resolvedTheme = resolveTheme(theme)
+
+  const openThemeMenu = useCallback((e: React.MouseEvent) => {
+    if (!isAgent || !agentId) return
+    e.preventDefault()
+    e.stopPropagation()
+    setThemeMenu({ x: e.clientX, y: e.clientY })
+  }, [isAgent, agentId])
+
+  const applyPreset = useCallback(async (presetTheme: AgentTheme | null) => {
+    if (!agentId) return
+    setThemeMenu(null)
+    await window.electronAPI.setAgentTheme(agentId, presetTheme)
+  }, [agentId])
+
+  const updateThemeField = useCallback(async (field: keyof AgentTheme, value: string) => {
+    if (!agentId) return
+    const next: AgentTheme = { ...(theme ?? {}), [field]: value }
+    await window.electronAPI.setAgentTheme(agentId, next)
+  }, [agentId, theme])
 
   // Rnd lives inside the CSS-transformed canvas. Positions are in canvas space.
   // CSS scale(zoom) handles visual scaling. No manual * zoom needed.
@@ -175,15 +202,30 @@ export function FloatingWindow({
   // Minimized: hide but keep hooks alive (React requires consistent hook count)
   if (minimized) return null
 
+  const themedWindowStyle: React.CSSProperties = {
+    ...windowStyle,
+    border: `1px solid ${resolvedTheme.border}`,
+    backgroundColor: resolvedTheme.bg
+  }
+  const themedTitleBarStyle: React.CSSProperties = {
+    ...titleBarStyle,
+    backgroundColor: resolvedTheme.chrome
+  }
+
   // Maximized: render via portal into viewport (outside canvas transform)
   if (maximized && viewportRef?.current) {
     return createPortal(
       <div style={{
         position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
         zIndex: 99998, display: 'flex', flexDirection: 'column',
-        ...windowStyle
+        ...themedWindowStyle
       }}>
-        <div className="window-titlebar" style={titleBarStyle} onDoubleClick={onMaximize}>
+        <div
+          className="window-titlebar"
+          style={themedTitleBarStyle}
+          onDoubleClick={onMaximize}
+          onContextMenu={openThemeMenu}
+        >
           {statusColor && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: statusColor, marginRight: 8 }} />}
           <span style={{ flex: 1, fontSize: '12px', color: '#ccc' }}>{title}</span>
           <button onMouseDown={e => e.stopPropagation()} onClick={onMinimize} style={btnStyle}>─</button>
@@ -191,6 +233,7 @@ export function FloatingWindow({
           <button onMouseDown={e => e.stopPropagation()} onClick={onClose} style={{ ...btnStyle, color: '#e55' }}>✕</button>
         </div>
         <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>
+        {themeMenu && <ThemeMenu x={themeMenu.x} y={themeMenu.y} theme={theme} onClose={() => setThemeMenu(null)} onApplyPreset={applyPreset} onChangeField={updateThemeField} />}
       </div>,
       viewportRef.current
     )
@@ -200,7 +243,7 @@ export function FloatingWindow({
     <Rnd
       position={{ x, y }}
       size={{ width: displayWidth, height: displayHeight }}
-      style={{ ...windowStyle, zIndex }}
+      style={{ ...themedWindowStyle, zIndex }}
       dragHandleClassName="window-titlebar"
       minWidth={300}
       minHeight={200}
@@ -212,7 +255,12 @@ export function FloatingWindow({
       onResizeStop={handleResizeStop}
     >
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <div className="window-titlebar" style={titleBarStyle} onDoubleClick={onMaximize}>
+        <div
+          className="window-titlebar"
+          style={themedTitleBarStyle}
+          onDoubleClick={onMaximize}
+          onContextMenu={openThemeMenu}
+        >
           {statusColor && <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: statusColor, marginRight: 8 }} />}
           <span style={{ flex: 1, fontSize: '12px', color: '#ccc' }}>{title}</span>
           <button onMouseDown={e => e.stopPropagation()} onClick={onMinimize} style={btnStyle}>─</button>
@@ -242,7 +290,93 @@ export function FloatingWindow({
         )}
         <div style={{ flex: 1, overflow: 'hidden' }}>{children}</div>
       </div>
+      {themeMenu && <ThemeMenu x={themeMenu.x} y={themeMenu.y} theme={theme} onClose={() => setThemeMenu(null)} onApplyPreset={applyPreset} onChangeField={updateThemeField} />}
     </Rnd>
+  )
+}
+
+interface ThemeMenuProps {
+  x: number
+  y: number
+  theme: AgentTheme | undefined
+  onClose: () => void
+  onApplyPreset: (theme: AgentTheme | null) => void
+  onChangeField: (field: keyof AgentTheme, value: string) => void
+}
+
+function ThemeMenu({ x, y, theme, onClose, onApplyPreset, onChangeField }: ThemeMenuProps) {
+  const resolved = resolveTheme(theme)
+  const fields: { key: keyof AgentTheme; label: string }[] = [
+    { key: 'chrome', label: 'Title Bar' },
+    { key: 'border', label: 'Border' },
+    { key: 'bg', label: 'Background' },
+    { key: 'text', label: 'Text' }
+  ]
+
+  return createPortal(
+    <>
+      <div onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 100000 }} />
+      <div style={{
+        position: 'fixed', left: x, top: y, zIndex: 100001,
+        backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '6px',
+        padding: '8px', minWidth: '220px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+        fontFamily: 'monospace', color: '#ccc'
+      }}>
+        <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', marginBottom: '6px', padding: '0 4px' }}>
+          Quick Themes
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', marginBottom: '8px' }}>
+          {THEME_PRESETS.map(preset => (
+            <button
+              key={preset.id}
+              onClick={() => onApplyPreset(preset.id === 'default' ? null : preset.theme)}
+              title={preset.label}
+              style={{
+                background: preset.theme.chrome,
+                border: `1px solid ${preset.theme.border}`,
+                borderRadius: '4px',
+                color: preset.theme.text,
+                cursor: 'pointer',
+                fontSize: '14px',
+                padding: '8px 0',
+                lineHeight: 1
+              }}
+            >{preset.emoji}</button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', marginBottom: '6px', padding: '0 4px' }}>
+          Custom Colors
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+          {fields.map(f => (
+            <label key={f.key} style={{
+              display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px',
+              padding: '4px 6px', backgroundColor: '#222', borderRadius: '3px'
+            }}>
+              <input
+                type="color"
+                value={resolved[f.key]}
+                onChange={e => onChangeField(f.key, e.target.value)}
+                style={{ width: '24px', height: '20px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+              />
+              <span style={{ flex: 1 }}>{f.label}</span>
+              <span style={{ color: '#666', fontSize: '10px' }}>{resolved[f.key]}</span>
+            </label>
+          ))}
+        </div>
+
+        <button
+          onClick={() => onApplyPreset(null)}
+          style={{
+            width: '100%', padding: '6px', fontSize: '11px',
+            background: 'transparent', border: '1px solid #444', borderRadius: '4px',
+            color: '#888', cursor: 'pointer', fontFamily: 'monospace'
+          }}
+        >Reset to Default</button>
+      </div>
+    </>,
+    document.body
   )
 }
 

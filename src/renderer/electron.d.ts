@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentState, HubInfo, PinboardTask, InfoEntry, WorkspacePreset, Skill, CreateScheduleInput, EditScheduleInput, CommunityTeam, CommunityTeamListItem, CommunityAgent, CommunityCategory } from '../shared/types'
+import type { AgentConfig, AgentState, AgentTheme, HubInfo, PinboardTask, InfoEntry, WorkspacePreset, Skill, CreateScheduleInput, EditScheduleInput, CommunityTeam, CommunityTeamListItem, CommunityAgent, CommunityCategory } from '../shared/types'
 
 declare global {
   interface Window {
@@ -56,6 +56,8 @@ declare global {
       communityGet: (issueNumber: number) => Promise<{ success: true; team: CommunityTeam; isStarredByMe: boolean } | { success: false; error: string }>
       communityShare: (input: { name: string; description: string; author: string; category: CommunityCategory; agents: CommunityAgent[] }) => Promise<{ success: true; team: CommunityTeam } | { success: false; error: string }>
       communityToggleStar: (issueNumber: number) => Promise<{ success: true; stars: number; isStarredByMe: boolean } | { success: false; error: string }>
+      // Per-agent theme
+      setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
     }
   }
 }
