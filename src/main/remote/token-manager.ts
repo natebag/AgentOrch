@@ -9,6 +9,7 @@ export interface RemoteSession {
   ip: string
   firstSeen: number
   lastSeen: number
+  workshopVerified?: boolean
 }
 
 export class TokenManager {
@@ -83,6 +84,16 @@ export class TokenManager {
       }
     }
     return active
+  }
+
+  verifyWorkshop(ip: string): void {
+    const session = this.sessions.get(ip)
+    if (session) session.workshopVerified = true
+  }
+
+  isWorkshopVerified(ip: string): boolean {
+    const session = this.sessions.get(ip)
+    return session?.workshopVerified === true
   }
 
   getConnectionCount(): number {

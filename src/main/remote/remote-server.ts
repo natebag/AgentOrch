@@ -45,13 +45,16 @@ export interface RemoteServerDeps {
   getAgents: () => RemoteAgentSummary[]
   getSchedules: () => RemoteScheduleSummary[]
   getPinboardTasks: () => RemoteTaskSummary[]
-  getAgentOutput: (agentId: string) => string[]
+  getAgentOutput: (agentId: string, lines?: number) => string[]
   sendMessage: (to: string, text: string) => void
   pauseSchedule: (id: string) => unknown
   resumeSchedule: (id: string) => unknown
   restartSchedule: (id: string) => unknown
   postTask: (title: string, description: string, priority: 'low' | 'medium' | 'high') => unknown
   getWorkshopPasscodeSet: () => boolean
+  getWorkspaceState: () => any
+  getWorkshopPasscodeHash: () => string | null
+  killAgent: (agentId: string) => void
 }
 
 // Find the static directory at runtime. In electron-vite dev mode, __dirname
@@ -220,6 +223,82 @@ export class RemoteServer {
         workshopPasscodeSet: this.deps.getWorkshopPasscodeSet()
       }
       res.json(snapshot)
+    })
+
+    // ── Workshop endpoints ────────────────────────────────────────────────
+
+    // Track workshop PIN attempts per IP
+    const workshopAttempts = new Map<string, { count: number; lockedUntil: number }>()
+
+    this.app.post('/r/:token/workshop/verify', (req, res) => {
+      const ip = req.ip || 'unknown'
+      const now = Date.now()
+      const attempt = workshopAttempts.get(ip)
+      if (attempt && attempt.lockedUntil > now) {
+        const waitSec = Math.ceil((attempt.lockedUntil - now) / 1000)
+        res.json({ verified: false, error: `Locked out. Try again in ${waitSec}s`, attemptsLeft: 0 })
+        return
+      }
+      const { pin } = req.body ?? {}
+      if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+        res.status(400).json({ error: 'Invalid PIN format' })
+        return
+      }
+      const hash = require('crypto').createHash('sha256').update(pin).digest('hex')
+      const expected = this.deps.getWorkshopPasscodeHash()
+      if (!expected) {
+        res.status(400).json({ error: 'No passcode configured' })
+        return
+      }
+      if (hash === expected) {
+        workshopAttempts.delete(ip)
+        this.deps.tokenManager.verifyWorkshop(ip)
+        res.json({ verified: true })
+      } else {
+        const a = attempt ?? { count: 0, lockedUntil: 0 }
+        a.count++
+        if (a.count >= 5) {
+          a.lockedUntil = now + 60_000
+          a.count = 0
+        }
+        workshopAttempts.set(ip, a)
+        const left = 5 - a.count
+        res.json({ verified: false, attemptsLeft: left })
+      }
+    })
+
+    const requireWorkshop = (req: Request, res: Response, next: NextFunction): void => {
+      const ip = req.ip || 'unknown'
+      if (!this.deps.tokenManager.isWorkshopVerified(ip)) {
+        res.status(403).json({ error: 'Workshop not verified' })
+        return
+      }
+      next()
+    }
+
+    this.app.get('/r/:token/workshop/state', requireWorkshop, (_req, res) => {
+      const ws = this.deps.getWorkspaceState()
+      if (!ws) {
+        res.json({ windows: [], canvas: { zoom: 1, panX: 0, panY: 0 } })
+        return
+      }
+      const visible = ws.windows.filter((w: any) => !w.minimized)
+      res.json({ windows: visible, canvas: { zoom: ws.zoom, panX: ws.panX, panY: ws.panY } })
+    })
+
+    this.app.get('/r/:token/workshop/output/:agentId', requireWorkshop, (req, res) => {
+      const lines = Math.min(parseInt(req.query.lines as string) || 200, 500)
+      const output = this.deps.getAgentOutput(req.params.agentId, lines)
+      res.json({ lines: output })
+    })
+
+    this.app.post('/r/:token/workshop/kill/:agentId', requireWorkshop, (req, res) => {
+      try {
+        this.deps.killAgent(req.params.agentId)
+        res.json({ ok: true })
+      } catch (err) {
+        res.status(400).json({ error: (err as Error).message })
+      }
     })
   }
 }

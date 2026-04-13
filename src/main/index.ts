@@ -216,10 +216,10 @@ async function enableRemoteView(): Promise<void> {
           id: t.id, title: t.title, priority: t.priority, status: t.status, claimedBy: t.claimedBy
         }))
     },
-    getAgentOutput: (agentId: string) => {
+    getAgentOutput: (agentId: string, lines?: number) => {
       const managed = agents.get(agentId)
       if (!managed) return []
-      return managed.outputBuffer.getLines(50)
+      return managed.outputBuffer.getLines(lines ?? 50)
     },
     sendMessage: (to: string, text: string) => {
       const target = Array.from(agents.values()).find(m => m.config.name === to)
@@ -243,6 +243,25 @@ async function enableRemoteView(): Promise<void> {
       return hub.pinboard.postTask(title, description, priority, 'remote-user')
     },
     getWorkshopPasscodeSet: () => workshopPasscodeHash !== null,
+    getWorkspaceState: () => cachedWorkspaceState,
+    getWorkshopPasscodeHash: () => workshopPasscodeHash,
+    killAgent: (agentId: string) => {
+      const managed = agents.get(agentId)
+      if (!managed) throw new Error('Agent not found')
+      manualKills.add(agentId)
+      killPty(managed)
+      hub.registry.remove(managed.config.name)
+      hub.messages.clearAgent(managed.config.name)
+      pendingNudges.delete(managed.config.name)
+      lastNudgeDelivery.delete(managed.config.name)
+      const fallbackTimer = nudgeFallbackTimers.get(managed.config.name)
+      if (fallbackTimer) { clearTimeout(fallbackTimer); nudgeFallbackTimers.delete(managed.config.name) }
+      if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+      initialPrompts.delete(agentId)
+      hasReceivedInitialPrompt.delete(agentId)
+      agents.delete(agentId)
+      mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    },
   })
 
   const expressApp = remoteServer.getApp()
