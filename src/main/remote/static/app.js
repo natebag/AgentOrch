@@ -217,23 +217,65 @@
       .replaceAll("'", '&#39;')
   }
 
-  // Strip ANSI escape sequences from raw PTY output so it's readable on phone.
-  // xterm.js handles these on desktop, but we display plain text on the phone.
-  function stripAnsi(s) {
-    if (!s) return ''
-    return s
+  // Clean raw PTY output for phone display.
+  // The PTY buffer contains raw terminal screen redraws (cursor movement, TUI
+  // repaints, spinners, status bars). xterm.js interprets these as a virtual
+  // screen on desktop. For the phone we need to extract just the meaningful text.
+  function stripAnsi(text) {
+    if (!text) return ''
+
+    let s = text
       // CSI sequences: ESC[ ... letter (colors, cursor movement, erase, etc.)
       .replace(/\x1b\[[0-9;?]*[a-zA-Z@]/g, '')
       // OSC sequences: ESC] ... BEL or ESC\ (window titles, etc.)
       .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
-      // Other ESC sequences (charset selection, etc.)
+      // Other ESC sequences
       .replace(/\x1b[()][A-Z0-9]/g, '')
       .replace(/\x1b[a-zA-Z]/g, '')
-      // Remaining control characters (BEL, carriage return, etc.) except newline/tab
+      // Remaining control characters except newline/tab
       .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
-      // Collapse excessive blank lines
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
+
+    // Filter TUI noise line by line
+    const lines = s.split('\n')
+    const filtered = []
+    let prevLine = ''
+
+    for (const raw of lines) {
+      const line = raw.replace(/\r/g, '').trim()
+
+      // Skip empty/whitespace-only lines in sequences
+      if (!line) {
+        if (filtered.length > 0 && filtered[filtered.length - 1] !== '') filtered.push('')
+        continue
+      }
+
+      // Skip duplicate consecutive lines (TUI redraws)
+      if (line === prevLine) continue
+      prevLine = line
+
+      // Skip Claude Code TUI chrome / spinner noise
+      if (/^[─━═]{4,}$/.test(line)) continue                          // horizontal rules
+      if (/^>\s*$/.test(line)) continue                                // empty prompt
+      if (/^[✢✶✻✽●·⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⏵▐▛▜▝▘]+/.test(line) && line.length < 80) continue  // spinner-only lines
+      if (/thinking with high effort/i.test(line) && !/^[●*]/.test(line)) continue   // status bar redraws
+      if (/Quantumizing/i.test(line) && line.length < 60) continue     // thinking status fragments
+      if (/esc to interrupt/i.test(line)) continue                     // prompt bar
+      if (/bypass permissions on/i.test(line)) continue                // mode indicator
+      if (/shift\+tab to cycle/i.test(line)) continue                  // mode hint
+      if (/^\s*⎿\s*Tip:/i.test(line)) continue                        // tips
+      if (/^\s*⎿\s*Running…/.test(line)) continue                     // tool running indicator
+      if (/^\s*⏵⏵/.test(line)) continue                               // mode indicator
+      if (/^[a-z]+\d+[a-z]*$/i.test(line) && line.length < 20) continue  // spinner fragment garbage
+
+      // Lines with very few printable chars relative to length are likely garbage
+      const printable = line.replace(/\s/g, '')
+      if (printable.length < 3 && line.length > 0) continue
+
+      filtered.push(raw.replace(/\r/g, ''))
+    }
+
+    // Collapse runs of blank lines
+    return filtered.join('\n').replace(/\n{3,}/g, '\n\n').trim()
   }
 
   // Polling lifecycle
