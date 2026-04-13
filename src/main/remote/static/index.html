@@ -14,6 +14,7 @@
       <span id="connection-badge" class="badge ok">🟢 1</span>
       <span id="project-name">Loading...</span>
       <span id="session-time" class="session-time"></span>
+      <button id="workshop-btn" class="workshop-btn hidden" title="Workshop">&#128295; Workshop</button>
       <button id="refresh-btn" title="Refresh" aria-label="Refresh">⟳</button>
     </div>
     <div id="agent-summary" class="header-sub">— agents</div>
@@ -40,6 +41,49 @@
 
     <div id="status-message" class="status-message"></div>
   </main>
+
+  <!-- Workshop passcode entry -->
+  <div id="workshop-passcode" class="overlay hidden">
+    <div class="passcode-card">
+      <h3>Enter Workshop Passcode</h3>
+      <div id="passcode-boxes" class="passcode-boxes">
+        <input type="tel" maxlength="1" class="pin-box" data-idx="0" inputmode="numeric" />
+        <input type="tel" maxlength="1" class="pin-box" data-idx="1" inputmode="numeric" />
+        <input type="tel" maxlength="1" class="pin-box" data-idx="2" inputmode="numeric" />
+        <input type="tel" maxlength="1" class="pin-box" data-idx="3" inputmode="numeric" />
+      </div>
+      <div id="passcode-error" class="passcode-error"></div>
+      <button id="passcode-cancel" class="passcode-cancel-btn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Workshop spatial canvas -->
+  <div id="workshop-view" class="hidden">
+    <div id="workshop-header" class="workshop-header">
+      <span id="workshop-back" class="workshop-back">&larr; Back</span>
+      <span class="workshop-title">Workshop</span>
+      <span id="workshop-hint" class="workshop-hint">pinch to zoom</span>
+    </div>
+    <div id="workshop-canvas-viewport">
+      <div id="workshop-canvas"></div>
+    </div>
+  </div>
+
+  <!-- Workshop agent detail view -->
+  <div id="workshop-detail" class="hidden">
+    <div id="detail-header" class="detail-header">
+      <span id="detail-back" class="detail-back-btn">&larr;</span>
+      <span id="detail-status-dot" class="detail-status-dot"></span>
+      <span id="detail-name" class="detail-name"></span>
+      <span id="detail-meta" class="detail-meta"></span>
+      <button id="detail-stop" class="detail-stop-btn">Stop</button>
+    </div>
+    <div id="detail-output" class="detail-output"></div>
+    <div class="detail-send-bar">
+      <input id="detail-send-text" type="text" placeholder="Type a message..." />
+      <button id="detail-send-btn">&uarr;</button>
+    </div>
+  </div>
 
   <footer id="send-bar">
     <select id="send-target" aria-label="Target agent"></select>

@@ -66,6 +66,14 @@
     renderSchedules(state.schedules)
     renderPinboard(state.pinboardTasks)
     renderSendTargets(state.agents)
+
+    // Workshop button visibility
+    const workshopBtn = $('workshop-btn')
+    if (state.workshopPasscodeSet) {
+      workshopBtn.classList.remove('hidden')
+    } else {
+      workshopBtn.classList.add('hidden')
+    }
   }
 
   function renderAgents(list) {
@@ -222,8 +230,19 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') startPolling()
-    else stopPolling()
+    if (document.visibilityState === 'visible') {
+      if (workshopActive) {
+        fetchWorkshopState()
+        if (!workshopPollHandle) workshopPollHandle = setInterval(fetchWorkshopState, POLL_INTERVAL_MS)
+        if (currentDetailAgent && !detailPollHandle) detailPollHandle = setInterval(fetchDetailOutput, POLL_INTERVAL_MS)
+      } else {
+        startPolling()
+      }
+    } else {
+      stopPolling()
+      if (workshopPollHandle) { clearInterval(workshopPollHandle); workshopPollHandle = null }
+      if (detailPollHandle) { clearInterval(detailPollHandle); detailPollHandle = null }
+    }
   })
 
   // Section collapse
@@ -323,6 +342,283 @@
     } catch {
       statusMessage('Network error', 'error')
     }
+  })
+
+  // --- Workshop ---
+  let workshopActive = false
+  let workshopPollHandle = null
+  let currentDetailAgent = null
+  let detailPollHandle = null
+  let workshopTouchState = { zoom: 0.4, panX: 0, panY: 0 }
+
+  // Passcode entry
+  $('workshop-btn').addEventListener('click', () => {
+    $('workshop-passcode').classList.remove('hidden')
+    const boxes = document.querySelectorAll('.pin-box')
+    boxes.forEach(b => { b.value = '' })
+    boxes[0].focus()
+    $('passcode-error').textContent = ''
+  })
+
+  $('passcode-cancel').addEventListener('click', () => {
+    $('workshop-passcode').classList.add('hidden')
+  })
+
+  document.querySelectorAll('.pin-box').forEach((box, idx) => {
+    box.addEventListener('input', (e) => {
+      const val = e.target.value.replace(/\D/g, '')
+      e.target.value = val.slice(0, 1)
+      if (val && idx < 3) {
+        document.querySelectorAll('.pin-box')[idx + 1].focus()
+      }
+      if (idx === 3 && val) {
+        const pin = Array.from(document.querySelectorAll('.pin-box')).map(b => b.value).join('')
+        if (pin.length === 4) verifyPasscode(pin)
+      }
+    })
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+        document.querySelectorAll('.pin-box')[idx - 1].focus()
+      }
+    })
+  })
+
+  async function verifyPasscode(pin) {
+    try {
+      const res = await fetch(`${BASE}/workshop/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      })
+      const data = await res.json()
+      if (data.verified) {
+        $('workshop-passcode').classList.add('hidden')
+        enterWorkshop()
+      } else {
+        $('passcode-error').textContent = data.error || `Wrong passcode (${data.attemptsLeft} left)`
+        document.querySelectorAll('.pin-box').forEach(b => { b.value = '' })
+        document.querySelectorAll('.pin-box')[0].focus()
+        $('passcode-boxes').classList.add('shake')
+        setTimeout(() => $('passcode-boxes').classList.remove('shake'), 500)
+      }
+    } catch {
+      $('passcode-error').textContent = 'Network error'
+    }
+  }
+
+  // Workshop canvas enter/exit + polling
+  function enterWorkshop() {
+    workshopActive = true
+    $('content').classList.add('hidden')
+    $('send-bar').classList.add('hidden')
+    $('header').classList.add('hidden')
+    $('workshop-view').classList.remove('hidden')
+    workshopTouchState = { zoom: 0.4, panX: 0, panY: 0 }
+    fetchWorkshopState()
+    workshopPollHandle = setInterval(fetchWorkshopState, POLL_INTERVAL_MS)
+    setupTouchHandlers()
+  }
+
+  function exitWorkshop() {
+    workshopActive = false
+    $('workshop-view').classList.add('hidden')
+    $('workshop-detail').classList.add('hidden')
+    $('content').classList.remove('hidden')
+    $('send-bar').classList.remove('hidden')
+    $('header').classList.remove('hidden')
+    if (workshopPollHandle) { clearInterval(workshopPollHandle); workshopPollHandle = null }
+    if (detailPollHandle) { clearInterval(detailPollHandle); detailPollHandle = null }
+    currentDetailAgent = null
+  }
+
+  $('workshop-back').addEventListener('click', exitWorkshop)
+
+  async function fetchWorkshopState() {
+    try {
+      const res = await fetch(`${BASE}/workshop/state`)
+      if (res.status === 403) { exitWorkshop(); statusMessage('Workshop session expired', 'error'); return }
+      if (!res.ok) return
+      const data = await res.json()
+      renderWorkshopCanvas(data)
+    } catch { /* retry on next poll */ }
+  }
+
+  // Canvas rendering
+  function renderWorkshopCanvas(data) {
+    const canvas = $('workshop-canvas')
+    canvas.innerHTML = ''
+
+    for (const win of data.windows) {
+      const card = document.createElement('div')
+      card.className = 'ws-card'
+      card.style.left = win.x + 'px'
+      card.style.top = win.y + 'px'
+      card.style.width = win.width + 'px'
+      card.style.height = win.height + 'px'
+
+      if (win.type === 'agent' && win.agent) {
+        const a = win.agent
+        const theme = a.theme || {}
+        card.style.borderColor = theme.border || '#333'
+        card.innerHTML = `
+          <div class="ws-card-chrome" style="background:${escapeHtml(theme.chrome || '#1e1e1e')}">
+            <span class="ws-status-dot ${escapeHtml(a.status)}"></span>
+            <span class="ws-card-title" style="color:${escapeHtml(theme.text || '#ccc')}">${escapeHtml(a.name)}</span>
+            <span class="ws-card-role" style="color:${escapeHtml(theme.text || '#888')}">${escapeHtml(a.role)}</span>
+          </div>
+          <div class="ws-card-body" style="background:${escapeHtml(theme.bg || '#0d0d0d')};color:${escapeHtml(theme.text || '#888')}">
+            ${escapeHtml(a.cli)}${a.model ? ' · ' + escapeHtml(a.model) : ''}
+          </div>
+        `
+        card.addEventListener('click', () => openAgentDetail(a))
+      } else {
+        card.innerHTML = `
+          <div class="ws-card-chrome"><span class="ws-card-title">${escapeHtml(win.title)}</span></div>
+          <div class="ws-card-body" style="color:#666">${escapeHtml(win.panelType || 'panel')}</div>
+        `
+      }
+
+      canvas.appendChild(card)
+    }
+
+    applyCanvasTransform()
+  }
+
+  function applyCanvasTransform() {
+    const canvas = $('workshop-canvas')
+    const { zoom, panX, panY } = workshopTouchState
+    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`
+  }
+
+  // Touch handlers for pinch/zoom/pan
+  function setupTouchHandlers() {
+    const viewport = $('workshop-canvas-viewport')
+    let startDist = 0
+    let startZoom = 1
+    let lastTouchX = 0, lastTouchY = 0
+    let isPinching = false
+
+    // Remove old listeners by replacing the element
+    const clone = viewport.cloneNode(true)
+    viewport.parentNode.replaceChild(clone, viewport)
+    clone.id = 'workshop-canvas-viewport'
+
+    const vp = $('workshop-canvas-viewport')
+
+    vp.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        isPinching = true
+        startDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY)
+        startZoom = workshopTouchState.zoom
+      } else if (e.touches.length === 1) {
+        isPinching = false
+        lastTouchX = e.touches[0].clientX
+        lastTouchY = e.touches[0].clientY
+      }
+    }, { passive: true })
+
+    vp.addEventListener('touchmove', (e) => {
+      if (isPinching && e.touches.length === 2) {
+        e.preventDefault()
+        const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY)
+        workshopTouchState.zoom = Math.max(0.15, Math.min(2.0, startZoom * (dist / startDist)))
+        applyCanvasTransform()
+      } else if (!isPinching && e.touches.length === 1) {
+        const dx = e.touches[0].clientX - lastTouchX
+        const dy = e.touches[0].clientY - lastTouchY
+        lastTouchX = e.touches[0].clientX
+        lastTouchY = e.touches[0].clientY
+        workshopTouchState.panX += dx
+        workshopTouchState.panY += dy
+        applyCanvasTransform()
+      }
+    }, { passive: false })
+
+    vp.addEventListener('touchend', () => { isPinching = false })
+  }
+
+  // Agent detail view
+  async function openAgentDetail(agent) {
+    currentDetailAgent = agent
+    $('workshop-view').classList.add('hidden')
+    $('workshop-detail').classList.remove('hidden')
+
+    const theme = agent.theme || {}
+    $('detail-header').style.backgroundColor = theme.chrome || '#1e1e1e'
+    $('detail-header').style.borderBottom = `1px solid ${theme.border || '#333'}`
+    $('detail-name').textContent = agent.name
+    $('detail-name').style.color = theme.text || '#ccc'
+    $('detail-meta').textContent = `${agent.cli}${agent.model ? ' · ' + agent.model : ''}`
+    $('detail-status-dot').className = `detail-status-dot ${agent.status}`
+    $('detail-output').style.backgroundColor = theme.bg || '#0d0d0d'
+    $('detail-output').style.color = theme.text || '#ccc'
+    $('detail-output').textContent = 'Loading...'
+    $('detail-send-text').placeholder = `Type a message to ${agent.name}...`
+    $('detail-stop').style.display = agent.status === 'disconnected' ? 'none' : 'block'
+
+    await fetchDetailOutput()
+    detailPollHandle = setInterval(fetchDetailOutput, POLL_INTERVAL_MS)
+  }
+
+  function closeAgentDetail() {
+    currentDetailAgent = null
+    $('workshop-detail').classList.add('hidden')
+    $('workshop-view').classList.remove('hidden')
+    if (detailPollHandle) { clearInterval(detailPollHandle); detailPollHandle = null }
+  }
+
+  async function fetchDetailOutput() {
+    if (!currentDetailAgent) return
+    try {
+      const res = await fetch(`${BASE}/workshop/output/${encodeURIComponent(currentDetailAgent.id)}?lines=200`)
+      if (!res.ok) return
+      const data = await res.json()
+      const el = $('detail-output')
+      const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
+      el.textContent = data.lines.join('\n') || '(no output)'
+      if (wasAtBottom) el.scrollTop = el.scrollHeight
+    } catch { /* retry */ }
+  }
+
+  $('detail-back').addEventListener('click', closeAgentDetail)
+
+  // Send message from detail view
+  async function sendDetailMessage() {
+    if (!currentDetailAgent) return
+    const text = $('detail-send-text').value.trim()
+    if (!text) return
+    try {
+      const res = await fetch(`${BASE}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: currentDetailAgent.name, text })
+      })
+      if (res.ok) {
+        $('detail-send-text').value = ''
+        statusMessage(`Sent to ${currentDetailAgent.name}`, 'success')
+      }
+    } catch { statusMessage('Network error', 'error') }
+  }
+
+  $('detail-send-btn').addEventListener('click', sendDetailMessage)
+  $('detail-send-text').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendDetailMessage()
+  })
+
+  // Kill agent
+  $('detail-stop').addEventListener('click', async () => {
+    if (!currentDetailAgent) return
+    if (!confirm(`Kill ${currentDetailAgent.name}? This will terminate the agent.`)) return
+    try {
+      const res = await fetch(`${BASE}/workshop/kill/${encodeURIComponent(currentDetailAgent.id)}`, { method: 'POST' })
+      if (res.ok) {
+        statusMessage(`${currentDetailAgent.name} killed`, 'success')
+        closeAgentDetail()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        statusMessage(err.error || 'Kill failed', 'error')
+      }
+    } catch { statusMessage('Network error', 'error') }
   })
 
   // Initial start
