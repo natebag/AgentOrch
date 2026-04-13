@@ -11,8 +11,11 @@ Agents communicate through 25+ MCP tools — messaging, task boards, shared know
 - **25+ MCP tools** — agents message each other, post tasks, share research, read/write files, and more.
 - **Multi-model teams** — Claude, Codex, Kimi, Gemini, Copilot, Grok, OpenClaude (200+ models via OpenAI-compatible providers), or plain terminals.
 - **Scheduled prompts** — fire recurring prompts at any agent on a custom interval and duration. Pause/resume, run indefinitely, auto-resume on restart. Perfect for overnight "keep going" nudges.
-- **Remote View** *(experimental)* — tunnel your workshop to a public URL via Cloudflare. Check agent status, send messages, manage schedules, and post tasks from your phone. No port forwarding required.
+- **Remote View** *(experimental)* — tunnel your workshop to a public URL via Cloudflare. Check agent status, send messages, manage schedules, and post tasks from your phone. No port forwarding required. Configurable session timeout (1h–168h).
+- **Workshop mode** *(Remote View)* — passcode-gated spatial canvas on your phone that mirrors your desktop workspace layout. Pinch to zoom, drag to pan, tap agents to see output and type commands. Kill agents from your phone. View pinboard and info channel inline.
+- **Per-agent color themes** — right-click any terminal title bar to customize chrome, border, background, and text colors. 8 built-in themes (Sunshine, Ocean, Crimson, Forest, Royal, Dusk, Steel). "Apply theme by role" button in Settings colors your whole team in one click. Themes persist across restarts and travel with presets + shared community teams.
 - **39 preset templates** — pre-built team configurations. Search + filter by available CLIs.
+- **Community Teams** — share your best team presets with the community. Browse, star, and import other users' team configurations from the Community tab in Presets. No account required — browse and import anonymously.
 - **Skills system** — composable capability modules. Attach "Code Reviewer" + "Security Auditor" + "TypeScript Expert" to an agent. 15 built-in, create your own, browse 90k+ community skills.
 - **File Explorer + Monaco Editor** — browse project files, edit with VS Code's engine, syntax highlighting, tabs.
 - **Git panel** — full git UI: status, staging, commit, push/pull, branch management, diff viewer, log history.
@@ -46,7 +49,7 @@ Click **+** to spawn an agent:
 - **CEO Notes** — free-text instructions that define agent behavior
 - **Auto-approve** — skip permission prompts
 
-Or use **Presets** → **Templates** to launch a pre-configured team with one click.
+Or use **Presets** → **Templates** to launch a pre-configured team with one click. Browse the **Community** tab to import and star team presets shared by other users.
 
 ## CEO Notes — Controlling Agent Behavior
 
@@ -164,24 +167,32 @@ Set a custom prompt to fire at any agent on a recurring interval — the killer 
 
 Check on your AgentOrch workshop from your phone. Open **Settings → Remote View** and toggle Enable. AgentOrch downloads `cloudflared` on first run (~25MB, one-time) and spawns a tunnel that gives you a public `https://*.trycloudflare.com/r/<token>/` URL. Scan the QR code with your phone camera and you're in.
 
-**From your phone you can:**
-- 📊 See all agent statuses (working / idle / disconnected)
-- 👀 Tap any agent to see the last 50 lines of their terminal (ANSI-stripped)
-- 💬 Send messages to any agent (writes directly to their PTY)
-- 📅 Pause / resume / restart any scheduled prompt
-- 📌 Post new tasks to the pinboard
-- 🔴 Live connection count — turns red if more than one person is connected
+**Dashboard (default view) — quick monitoring:**
+- See all agent statuses (working / idle / disconnected)
+- Tap any agent to see terminal output (ANSI-stripped, TUI noise filtered)
+- Send messages to any agent
+- Pause / resume / restart any scheduled prompt
+- Post new tasks to the pinboard
+- Session countdown in the header — configurable from 1 hour to 168 hours (7 days)
+
+**Workshop mode — full workspace control:**
+
+Set a 4-digit passcode in Settings to unlock the Workshop button on your phone. Tap it, enter your PIN, and you get a **spatial canvas** mirroring your desktop workspace layout — agent windows at their real positions with theme colors. Pinch to zoom, drag to pan.
+
+- Tap an agent card → full-screen detail view with 200 lines of output, text input bar, and **Stop** button to kill agents remotely
+- Tap panel cards (pinboard, info channel, schedules) → full-screen views with all data
+- Canvas updates every 5 seconds — move a window on desktop, it moves on your phone
+- Passcode rate-limited: 5 attempts per minute, 60-second lockout
 
 **Security:**
 - 32-character URL token — `https://xxx.trycloudflare.com/r/<32-chars>/`
-- Token auto-expires after 8 hours of inactivity
+- Token auto-expires after configurable timeout (default 8 hours)
 - Token regenerates on every toggle — stale URLs die immediately
 - **"Kill all sessions"** panic button in Settings rotates the token and disconnects everyone
-- Rate limited (60 requests/IP/min), 4KB body cap, strict same-origin CORS
-- Cannot spawn or kill agents, edit CEO notes, or run arbitrary commands from remote
-- You can share the URL with a friend (bagjones!) — or keep it for yourself
-
-**What it cannot do (by design):** spawn agents, kill agents, edit CEO notes, run arbitrary commands. The remote surface is deliberately narrow — if a URL leaks, the damage is capped.
+- Workshop mode requires separate 4-digit passcode (SHA-256 hashed, rate-limited)
+- Rate limited (60 requests/IP/min), 4KB body cap
+- Dashboard cannot kill agents — only Workshop mode can (behind passcode)
+- Cannot spawn agents, edit CEO notes, or run arbitrary commands from either view
 
 ## Architecture
 
@@ -202,18 +213,22 @@ Electron App
 ├── Git Operations (shell git commands)
 ├── Prompt Scheduler (recurring prompts, per-project SQLite)
 ├── Remote Server (optional Cloudflare-tunneled mobile dashboard)
-│   ├── Token Manager (URL token auth + session tracking)
+│   ├── Token Manager (URL token auth + session tracking + workshop passcode)
 │   ├── Cloudflared Manager (lazy download + spawn)
-│   └── Express API (8 endpoints, rate-limited)
+│   ├── Express API (dashboard endpoints, rate-limited)
+│   └── Workshop API (passcode-gated: spatial state, output, kill)
+├── Community Client (GitHub Issues API for shared team presets)
+├── Themes Store (per-agent color persistence)
 ├── Update Checker (auto-update from GitHub)
 └── React UI
     ├── Workspace tabs (isolated teams)
-    ├── Infinite canvas with floating windows
+    ├── Infinite canvas with floating windows + per-agent color themes
     ├── Monaco Editor + file explorer
     ├── Git panel
     ├── Schedules panel
     ├── 8 toggleable panels
-    └── 39 preset templates with search/filter
+    ├── 39 preset templates + Community Teams tab
+    └── Stale task alert snooze (pinboard)
 ```
 
 ## Supported CLIs
