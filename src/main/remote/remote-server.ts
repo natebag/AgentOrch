@@ -51,6 +51,7 @@ export interface RemoteServerDeps {
   resumeSchedule: (id: string) => unknown
   restartSchedule: (id: string) => unknown
   postTask: (title: string, description: string, priority: 'low' | 'medium' | 'high') => unknown
+  getInfoEntries: () => { id: string; from: string; note: string; tags: string[]; createdAt: string }[]
   getWorkshopPasscodeSet: () => boolean
   getWorkspaceState: () => any
   getWorkshopPasscodeHash: () => string | null
@@ -217,6 +218,7 @@ export class RemoteServer {
         agents: this.deps.getAgents(),
         schedules: this.deps.getSchedules(),
         pinboardTasks: this.deps.getPinboardTasks(),
+        infoEntries: this.deps.getInfoEntries(),
         connectionCount: this.deps.tokenManager.getConnectionCount(),
         serverTime: Date.now(),
         sessionExpiresAt: this.deps.tokenManager.getExpiresAt(),

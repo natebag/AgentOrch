@@ -216,6 +216,12 @@ async function enableRemoteView(): Promise<void> {
           id: t.id, title: t.title, priority: t.priority, status: t.status, claimedBy: t.claimedBy
         }))
     },
+    getInfoEntries: () => {
+      if (!hub) return []
+      return hub.infoChannel.readInfo().map(e => ({
+        id: e.id, from: e.from, note: e.note, tags: e.tags, createdAt: e.createdAt
+      }))
+    },
     getAgentOutput: (agentId: string, lines?: number) => {
       const managed = agents.get(agentId)
       if (!managed) return []

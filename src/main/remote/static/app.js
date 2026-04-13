@@ -9,6 +9,7 @@
   const outputCache = new Map()  // agentId → { lines, fetchedAt }
   let pollHandle = null
   let agents = []
+  let lastState = null  // cache full state for panel detail views
 
   function statusMessage(text, kind) {
     const el = $('status-message')
@@ -61,6 +62,7 @@
       sessionTimeEl.textContent = ''
     }
 
+    lastState = state
     agents = state.agents
     renderAgents(state.agents)
     renderSchedules(state.schedules)
@@ -104,7 +106,7 @@
           outputDiv.style.display = 'block'
           outputDiv.textContent = 'Loading...'
           const lines = await fetchOutput(id)
-          outputDiv.textContent = lines.join('\n') || '(no output)'
+          outputDiv.textContent = stripAnsi(lines.join('\n')) || '(no output)'
         } else {
           outputDiv.style.display = 'none'
         }
@@ -213,6 +215,25 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;')
+  }
+
+  // Strip ANSI escape sequences from raw PTY output so it's readable on phone.
+  // xterm.js handles these on desktop, but we display plain text on the phone.
+  function stripAnsi(s) {
+    if (!s) return ''
+    return s
+      // CSI sequences: ESC[ ... letter (colors, cursor movement, erase, etc.)
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z@]/g, '')
+      // OSC sequences: ESC] ... BEL or ESC\ (window titles, etc.)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      // Other ESC sequences (charset selection, etc.)
+      .replace(/\x1b[()][A-Z0-9]/g, '')
+      .replace(/\x1b[a-zA-Z]/g, '')
+      // Remaining control characters (BEL, carriage return, etc.) except newline/tab
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+      // Collapse excessive blank lines
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
   }
 
   // Polling lifecycle
@@ -476,6 +497,7 @@
           <div class="ws-card-chrome"><span class="ws-card-title">${escapeHtml(win.title)}</span></div>
           <div class="ws-card-body" style="color:#666">${escapeHtml(win.panelType || 'panel')}</div>
         `
+        card.addEventListener('click', () => openPanelDetail(win))
       }
 
       canvas.appendChild(card)
@@ -567,6 +589,119 @@
     if (detailPollHandle) { clearInterval(detailPollHandle); detailPollHandle = null }
   }
 
+  // Panel detail views (pinboard, info)
+  function openPanelDetail(win) {
+    const panelType = (win.panelType || win.title || '').toLowerCase()
+    $('workshop-view').classList.add('hidden')
+    $('workshop-panel').classList.remove('hidden')
+    $('panel-title').textContent = win.title || panelType
+
+    const content = $('panel-content')
+    if (panelType.includes('pinboard')) {
+      renderPanelPinboard(content)
+    } else if (panelType.includes('info')) {
+      renderPanelInfo(content)
+    } else if (panelType.includes('schedule')) {
+      renderPanelSchedules(content)
+    } else {
+      content.innerHTML = '<div style="color:#666;padding:20px;text-align:center">Panel view not available</div>'
+    }
+  }
+
+  function closePanelDetail() {
+    $('workshop-panel').classList.add('hidden')
+    $('workshop-view').classList.remove('hidden')
+  }
+
+  $('panel-back').addEventListener('click', closePanelDetail)
+
+  function renderPanelPinboard(container) {
+    if (!lastState || !lastState.pinboardTasks) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center">No data</div>'
+      return
+    }
+    const tasks = lastState.pinboardTasks
+    if (tasks.length === 0) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center;font-style:italic">No tasks</div>'
+      return
+    }
+    const priorityColors = { high: '#ef4444', medium: '#eab308', low: '#22c55e' }
+    container.innerHTML = `
+      <div style="padding:8px;">
+        ${tasks.map(t => `
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:#1a1a1a;border-radius:4px;margin-bottom:6px;border:1px solid #333;">
+            <div style="width:8px;height:8px;border-radius:50%;background:${priorityColors[t.priority] || '#888'};margin-top:4px;flex-shrink:0;"></div>
+            <div style="flex:1;">
+              <div style="color:#e0e0e0;font-size:13px;margin-bottom:2px;">${escapeHtml(t.title)}</div>
+              <div style="display:flex;gap:8px;font-size:10px;color:#888;">
+                <span>${escapeHtml(t.status)}</span>
+                ${t.claimedBy ? `<span>→ ${escapeHtml(t.claimedBy)}</span>` : ''}
+                <span style="color:${priorityColors[t.priority] || '#888'}">${escapeHtml(t.priority)}</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `
+  }
+
+  function renderPanelInfo(container) {
+    if (!lastState || !lastState.infoEntries) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center">No data</div>'
+      return
+    }
+    const entries = lastState.infoEntries
+    if (entries.length === 0) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center;font-style:italic">No info entries</div>'
+      return
+    }
+    container.innerHTML = `
+      <div style="padding:8px;">
+        ${entries.map(e => `
+          <div style="padding:10px;background:#1a1a1a;border-radius:4px;margin-bottom:6px;border:1px solid #333;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span style="color:#8cc4ff;font-size:11px;font-weight:600;">${escapeHtml(e.from)}</span>
+              <span style="color:#555;font-size:10px;">${new Date(e.createdAt).toLocaleTimeString()}</span>
+            </div>
+            <div style="color:#ccc;font-size:12px;line-height:1.5;white-space:pre-wrap;">${escapeHtml(e.note)}</div>
+            ${e.tags && e.tags.length > 0 ? `
+              <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
+                ${e.tags.map(tag => `<span style="font-size:9px;padding:1px 6px;background:#2a2a3a;border-radius:3px;color:#8888cc;">${escapeHtml(tag)}</span>`).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `
+  }
+
+  function renderPanelSchedules(container) {
+    if (!lastState || !lastState.schedules) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center">No data</div>'
+      return
+    }
+    const list = lastState.schedules
+    if (list.length === 0) {
+      container.innerHTML = '<div style="color:#666;padding:20px;text-align:center;font-style:italic">No schedules</div>'
+      return
+    }
+    container.innerHTML = `
+      <div style="padding:8px;">
+        ${list.map(s => {
+          const isPaused = s.status === 'paused'
+          const intervalDisplay = s.intervalMinutes >= 60 && s.intervalMinutes % 60 === 0 ? `${s.intervalMinutes / 60}h` : `${s.intervalMinutes}min`
+          return `
+            <div style="padding:10px;background:#1a1a1a;border-radius:4px;margin-bottom:6px;border:1px solid #333;">
+              <div style="color:#e0e0e0;font-size:13px;margin-bottom:4px;">📅 ${escapeHtml(s.name)}</div>
+              <div style="color:#888;font-size:11px;">→ ${escapeHtml(s.agentName)} · Every ${intervalDisplay}</div>
+              <div style="color:#555;font-size:10px;margin-top:2px;">${escapeHtml(s.status)}</div>
+            </div>
+          `
+        }).join('')}
+      </div>
+    `
+  }
+
   async function fetchDetailOutput() {
     if (!currentDetailAgent) return
     try {
@@ -575,7 +710,7 @@
       const data = await res.json()
       const el = $('detail-output')
       const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
-      el.textContent = data.lines.join('\n') || '(no output)'
+      el.textContent = stripAnsi(data.lines.join('\n')) || '(no output)'
       if (wasAtBottom) el.scrollTop = el.scrollHeight
     } catch { /* retry */ }
   }
