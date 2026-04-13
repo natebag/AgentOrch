@@ -603,7 +603,8 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadPreset, onClose
         autoMode: a.autoMode,
         ...(a.model ? { model: a.model } : {}),
         ...(a.experimental ? { experimental: a.experimental } : {}),
-        ...(a.skills && a.skills.length > 0 ? { skills: a.skills } : {})
+        ...(a.skills && a.skills.length > 0 ? { skills: a.skills } : {}),
+        ...(a.theme ? { theme: a.theme } : {})
       })))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open preset for sharing')
@@ -833,7 +834,8 @@ export function PresetDialog({ agents, windows, zoom, pan, onLoadPreset, onClose
           autoMode: a.autoMode,
           ...(a.model ? { model: a.model } : {}),
           ...(a.experimental ? { experimental: a.experimental } : {}),
-          ...(a.skills ? { skills: a.skills } : {})
+          ...(a.skills ? { skills: a.skills } : {}),
+          ...(a.theme ? { theme: a.theme } : {})
         }))
       } else if (templateToLoad && activeTab === 'templates') {
         // Loading from built-in template — no saved positions

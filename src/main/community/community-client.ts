@@ -61,7 +61,8 @@ export function stripAgentForShare(agent: AgentConfig): CommunityAgent {
     autoMode: agent.autoMode,
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.experimental ? { experimental: agent.experimental } : {}),
-    ...(agent.skills && agent.skills.length > 0 ? { skills: agent.skills } : {})
+    ...(agent.skills && agent.skills.length > 0 ? { skills: agent.skills } : {}),
+    ...(agent.theme ? { theme: agent.theme } : {})
   }
 }
 

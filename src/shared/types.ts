@@ -317,6 +317,7 @@ export interface CommunityAgent {
   model?: string
   experimental?: boolean
   skills?: string[]
+  theme?: AgentTheme
 }
 
 export interface CommunityTeam {
