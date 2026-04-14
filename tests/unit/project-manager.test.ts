@@ -72,8 +72,8 @@ describe('ProjectManager', () => {
       expect(fs.existsSync(path.join(projectDir, '.cog', 'presets', 'test.json'))).toBe(true)
     })
 
-    it('does not migrate if .cog/ already exists', () => {
-      // Both folders exist — .cog takes precedence, legacy left alone
+    it('does not migrate if .cog/ already has comparable data', () => {
+      // Both folders exist with similarly-sized DBs → .cog takes precedence
       const legacyDir = path.join(projectDir, '.agentorch')
       const cogDir = path.join(projectDir, '.cog')
       fs.mkdirSync(legacyDir, { recursive: true })
@@ -86,6 +86,29 @@ describe('ProjectManager', () => {
       // Both still exist — no clobbering
       expect(fs.existsSync(legacyDir)).toBe(true)
       expect(fs.readFileSync(path.join(cogDir, 'cog.db'), 'utf-8')).toBe('current')
+    })
+
+    it('recovers legacy data when .cog/ DB was auto-created empty', () => {
+      // Simulates: user opened project after rebrand, migration failed (Windows
+      // EPERM), app created empty .cog/cog.db. Real data still in .agentorch/.
+      const legacyDir = path.join(projectDir, '.agentorch')
+      const cogDir = path.join(projectDir, '.cog')
+      fs.mkdirSync(legacyDir, { recursive: true })
+      fs.mkdirSync(cogDir, { recursive: true })
+
+      // Empty cog DB (~32KB simulating SQLite schema-only file)
+      fs.writeFileSync(path.join(cogDir, 'cog.db'), Buffer.alloc(32 * 1024))
+      // Legacy DB much bigger (the real data)
+      fs.writeFileSync(path.join(legacyDir, 'agentorch.db'), Buffer.alloc(200 * 1024))
+      fs.writeFileSync(path.join(legacyDir, 'agentorch.db-wal'), Buffer.alloc(50 * 1024))
+
+      pm.initProject(projectDir)
+
+      // Legacy folder gone, cog DB is now the legacy one (200KB), empty backup preserved
+      expect(fs.existsSync(legacyDir)).toBe(false)
+      expect(fs.statSync(path.join(cogDir, 'cog.db')).size).toBe(200 * 1024)
+      expect(fs.existsSync(path.join(cogDir, 'cog.db-wal'))).toBe(true)
+      expect(fs.existsSync(path.join(cogDir, 'cog.db.empty-backup'))).toBe(true)
     })
   })
 
