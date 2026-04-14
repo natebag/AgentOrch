@@ -2,6 +2,8 @@
 
 The AI-native agent orchestration IDE. Spawn teams of AI coding agents across multiple models and providers, watch them work in floating terminal windows, and orchestrate from above.
 
+![Orchestrator messaging a team of workers](assets/readme/OrchestratorMessagingTeam.gif)
+
 Agents communicate through 25+ MCP tools — messaging, task boards, shared knowledge, file operations — all in one workspace.
 
 ## What It Does
@@ -14,8 +16,12 @@ Agents communicate through 25+ MCP tools — messaging, task boards, shared know
 - **Remote View** *(experimental)* — tunnel your workshop to a public URL via Cloudflare. Check agent status, send messages, manage schedules, and post tasks from your phone. No port forwarding required. Configurable session timeout (1h–168h).
 - **Workshop mode** *(Remote View)* — passcode-gated spatial canvas on your phone that mirrors your desktop workspace layout. Pinch to zoom, drag to pan, tap agents to see output and type commands. Kill agents from your phone. View pinboard and info channel inline.
 - **Per-agent color themes** — right-click any terminal title bar to customize chrome, border, background, and text colors. 8 built-in themes (Sunshine, Ocean, Crimson, Forest, Royal, Dusk, Steel). "Apply theme by role" button in Settings colors your whole team in one click. Themes persist across restarts and travel with presets + shared community teams.
+
+  ![Color theme showcase](assets/readme/ColorShowcase.gif)
 - **39 preset templates** — pre-built team configurations. Search + filter by available CLIs.
 - **Community Teams** — share your best team presets with the community. Browse, star, and import other users' team configurations from the Community tab in Presets. No account required — browse and import anonymously.
+
+  ![Shareable team setups](assets/readme/ShareableSetups.jpg)
 - **Skills system** — composable capability modules. Attach "Code Reviewer" + "Security Auditor" + "TypeScript Expert" to an agent. 15 built-in, create your own, browse 90k+ community skills.
 - **File Explorer + Monaco Editor** — browse project files, edit with VS Code's engine, syntax highlighting, tabs.
 - **Git panel** — full git UI: status, staging, commit, push/pull, branch management, diff viewer, log history.
@@ -166,6 +172,10 @@ Set a custom prompt to fire at any agent on a recurring interval — the killer 
 ## Remote View *(experimental)*
 
 Check on your AgentOrch workshop from your phone. Open **Settings → Remote View** and toggle Enable. AgentOrch downloads `cloudflared` on first run (~25MB, one-time) and spawns a tunnel that gives you a public `https://*.trycloudflare.com/r/<token>/` URL. Scan the QR code with your phone camera and you're in.
+
+<p align="center">
+  <img src="assets/readme/Mobile1.gif" alt="Remote View on phone" width="320">
+</p>
 
 **Dashboard (default view) — quick monitoring:**
 - See all agent statuses (working / idle / disconnected)
