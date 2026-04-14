@@ -20,26 +20,51 @@ agentorch.db-shm
 /**
  * Migrate a legacy .agentorch/ folder to .cog/ on project open.
  * Renames the directory and the internal SQLite files (including WAL/SHM sidecars).
- * Runs once per project — on subsequent opens, .cog/ already exists and nothing happens.
+ *
+ * Handles three cases:
+ *  1. Only .agentorch/ exists → rename to .cog/, rename DB files inside
+ *  2. Both exist, .cog/ has no DB → user accidentally opened with new app first,
+ *     but real data is still in .agentorch/. Move .agentorch/* into .cog/
+ *  3. .cog/ exists with DB → already migrated, do nothing
  */
 function migrateLegacyFolder(projectPath: string): void {
   const cogDir = path.join(projectPath, COG_DIR)
   const legacyDir = path.join(projectPath, LEGACY_DIR)
 
-  // If new folder already exists, no migration needed
-  if (fs.existsSync(cogDir)) return
   // If neither exists, nothing to migrate (fresh project)
   if (!fs.existsSync(legacyDir)) return
 
-  // Rename .agentorch/ → .cog/
-  try {
-    fs.renameSync(legacyDir, cogDir)
-  } catch (err) {
-    console.warn(`[ProjectManager] Could not migrate ${legacyDir} → ${cogDir}: ${(err as Error).message}`)
+  const cogDbExists = fs.existsSync(path.join(cogDir, DB_FILE))
+  const legacyDbExists = fs.existsSync(path.join(legacyDir, LEGACY_DB_FILE))
+
+  // Case 3: .cog/ already has real data — skip migration
+  if (cogDbExists) {
+    console.log(`[ProjectManager] ${COG_DIR}/ already has data — skipping migration`)
     return
   }
 
-  // Rename DB files inside (agentorch.db + agentorch.db-wal + agentorch.db-shm)
+  // Case 2: .cog/ exists but is empty AND .agentorch/ has data → merge
+  if (fs.existsSync(cogDir) && legacyDbExists) {
+    console.log(`[ProjectManager] Found empty ${COG_DIR}/ alongside ${LEGACY_DIR}/ — merging legacy data in`)
+    try {
+      mergeDirInto(legacyDir, cogDir)
+      // Remove the now-empty legacy folder
+      fs.rmSync(legacyDir, { recursive: true, force: true })
+    } catch (err) {
+      console.warn(`[ProjectManager] Merge failed: ${(err as Error).message}`)
+      return
+    }
+  } else if (!fs.existsSync(cogDir) && fs.existsSync(legacyDir)) {
+    // Case 1: clean rename
+    try {
+      fs.renameSync(legacyDir, cogDir)
+    } catch (err) {
+      console.warn(`[ProjectManager] Could not rename ${legacyDir} → ${cogDir}: ${(err as Error).message}`)
+      return
+    }
+  }
+
+  // Rename DB files inside (agentorch.db + agentorch.db-wal + agentorch.db-shm → cog.db etc)
   for (const suffix of ['', '-wal', '-shm']) {
     const oldDb = path.join(cogDir, LEGACY_DB_FILE + suffix)
     const newDb = path.join(cogDir, DB_FILE + suffix)
@@ -47,12 +72,26 @@ function migrateLegacyFolder(projectPath: string): void {
       try {
         fs.renameSync(oldDb, newDb)
       } catch (err) {
-        console.warn(`[ProjectManager] Could not migrate DB file ${oldDb}: ${(err as Error).message}`)
+        console.warn(`[ProjectManager] Could not rename DB file ${oldDb}: ${(err as Error).message}`)
       }
     }
   }
 
-  console.log(`[ProjectManager] Migrated legacy ${LEGACY_DIR}/ → ${COG_DIR}/ in ${projectPath}`)
+  console.log(`[ProjectManager] Migrated ${LEGACY_DIR}/ → ${COG_DIR}/ in ${projectPath}`)
+}
+
+/** Recursively move contents of srcDir into destDir without overwriting existing files. */
+function mergeDirInto(srcDir: string, destDir: string): void {
+  fs.mkdirSync(destDir, { recursive: true })
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath = path.join(srcDir, entry.name)
+    const destPath = path.join(destDir, entry.name)
+    if (entry.isDirectory()) {
+      mergeDirInto(srcPath, destPath)
+    } else if (entry.isFile() && !fs.existsSync(destPath)) {
+      fs.copyFileSync(srcPath, destPath)
+    }
+  }
 }
 
 export class ProjectManager {

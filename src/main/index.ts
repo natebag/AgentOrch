@@ -27,6 +27,7 @@ import { CloudflaredManager } from './remote/cloudflared-manager'
 import { RemoteServer } from './remote/remote-server'
 import * as communityClient from './community/community-client'
 import * as themesStore from './themes/themes-store'
+import { migrateLegacyUserData } from './migration/userdata-migration'
 import type { AgentConfig, AgentTheme, RemoteSetupProgress, CommunityAgent, CommunityCategory } from '../shared/types'
 import { IPC } from '../shared/types'
 
@@ -1905,6 +1906,20 @@ function setupIPC(): void {
 
 async function main(): Promise<void> {
   await app.whenReady()
+
+  // One-time migration: copy global app data from the old AgentOrch userData
+  // folder to the new "The Cog" location. Runs before any userData access so
+  // settings/presets/themes/skills/recent-projects all show up for returning users.
+  try {
+    const result = migrateLegacyUserData(app.getPath('userData'), app.getPath('appData'))
+    if (result.ran) {
+      console.log(`[userdata-migration] Migrated from ${result.source}`)
+      console.log(`  Files: ${result.copiedFiles.join(', ') || '(none)'}`)
+      console.log(`  Dirs:  ${result.copiedDirs.join(', ') || '(none)'}`)
+    }
+  } catch (err) {
+    console.warn(`[userdata-migration] Failed: ${(err as Error).message}`)
+  }
 
   projectManager = new ProjectManager(app.getPath('userData'))
 
