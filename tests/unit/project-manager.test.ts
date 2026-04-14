@@ -21,29 +21,29 @@ describe('ProjectManager', () => {
   })
 
   describe('initProject', () => {
-    it('creates .agentorch directory structure', () => {
+    it('creates .cog directory structure', () => {
       pm.initProject(projectDir)
-      expect(fs.existsSync(path.join(projectDir, '.agentorch'))).toBe(true)
-      expect(fs.existsSync(path.join(projectDir, '.agentorch', 'presets'))).toBe(true)
+      expect(fs.existsSync(path.join(projectDir, '.cog'))).toBe(true)
+      expect(fs.existsSync(path.join(projectDir, '.cog', 'presets'))).toBe(true)
     })
 
-    it('writes .gitignore in .agentorch/', () => {
+    it('writes .gitignore in .cog/', () => {
       pm.initProject(projectDir)
       const gitignore = fs.readFileSync(
-        path.join(projectDir, '.agentorch', '.gitignore'), 'utf-8'
+        path.join(projectDir, '.cog', '.gitignore'), 'utf-8'
       )
-      expect(gitignore).toContain('agentorch.db')
-      expect(gitignore).toContain('agentorch.db-wal')
-      expect(gitignore).toContain('agentorch.db-shm')
+      expect(gitignore).toContain('cog.db')
+      expect(gitignore).toContain('cog.db-wal')
+      expect(gitignore).toContain('cog.db-shm')
     })
 
     it('does not overwrite existing .gitignore', () => {
-      const agentorchDir = path.join(projectDir, '.agentorch')
-      fs.mkdirSync(agentorchDir, { recursive: true })
-      fs.writeFileSync(path.join(agentorchDir, '.gitignore'), 'custom content')
+      const cogDir = path.join(projectDir, '.cog')
+      fs.mkdirSync(cogDir, { recursive: true })
+      fs.writeFileSync(path.join(cogDir, '.gitignore'), 'custom content')
 
       pm.initProject(projectDir)
-      const gitignore = fs.readFileSync(path.join(agentorchDir, '.gitignore'), 'utf-8')
+      const gitignore = fs.readFileSync(path.join(cogDir, '.gitignore'), 'utf-8')
       expect(gitignore).toBe('custom content')
     })
 
@@ -53,17 +53,51 @@ describe('ProjectManager', () => {
       expect(pm.currentProject!.path).toBe(projectDir)
       expect(pm.currentProject!.name).toBe(path.basename(projectDir))
     })
+
+    it('migrates legacy .agentorch/ folder to .cog/ on first open', () => {
+      // Simulate a user from before the rebrand
+      const legacyDir = path.join(projectDir, '.agentorch')
+      const legacyPresets = path.join(legacyDir, 'presets')
+      fs.mkdirSync(legacyPresets, { recursive: true })
+      fs.writeFileSync(path.join(legacyDir, 'agentorch.db'), 'fake db')
+      fs.writeFileSync(path.join(legacyDir, 'agentorch.db-wal'), 'fake wal')
+      fs.writeFileSync(path.join(legacyPresets, 'test.json'), '{}')
+
+      pm.initProject(projectDir)
+
+      // Legacy folder is gone, .cog/ has everything renamed
+      expect(fs.existsSync(legacyDir)).toBe(false)
+      expect(fs.existsSync(path.join(projectDir, '.cog', 'cog.db'))).toBe(true)
+      expect(fs.existsSync(path.join(projectDir, '.cog', 'cog.db-wal'))).toBe(true)
+      expect(fs.existsSync(path.join(projectDir, '.cog', 'presets', 'test.json'))).toBe(true)
+    })
+
+    it('does not migrate if .cog/ already exists', () => {
+      // Both folders exist — .cog takes precedence, legacy left alone
+      const legacyDir = path.join(projectDir, '.agentorch')
+      const cogDir = path.join(projectDir, '.cog')
+      fs.mkdirSync(legacyDir, { recursive: true })
+      fs.mkdirSync(cogDir, { recursive: true })
+      fs.writeFileSync(path.join(legacyDir, 'agentorch.db'), 'legacy')
+      fs.writeFileSync(path.join(cogDir, 'cog.db'), 'current')
+
+      pm.initProject(projectDir)
+
+      // Both still exist — no clobbering
+      expect(fs.existsSync(legacyDir)).toBe(true)
+      expect(fs.readFileSync(path.join(cogDir, 'cog.db'), 'utf-8')).toBe('current')
+    })
   })
 
   describe('paths', () => {
-    it('returns DB path inside .agentorch/', () => {
+    it('returns DB path inside .cog/', () => {
       pm.initProject(projectDir)
-      expect(pm.dbPath).toBe(path.join(projectDir, '.agentorch', 'agentorch.db'))
+      expect(pm.dbPath).toBe(path.join(projectDir, '.cog', 'cog.db'))
     })
 
-    it('returns presets dir inside .agentorch/', () => {
+    it('returns presets dir inside .cog/', () => {
       pm.initProject(projectDir)
-      expect(pm.presetsDir).toBe(path.join(projectDir, '.agentorch', 'presets'))
+      expect(pm.presetsDir).toBe(path.join(projectDir, '.cog', 'presets'))
     })
 
     it('throws if no project is open', () => {
