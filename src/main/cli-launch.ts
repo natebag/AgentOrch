@@ -1,5 +1,40 @@
 import type { AgentConfig } from '../shared/types'
 
+// ── Input validation for values that get spliced into shell command strings ──
+//
+// The commands produced by this module are typed into a live PTY shell by the
+// caller. That means every interpolated value is interpreted by bash/zsh/cmd/
+// powershell/fish. To keep that safe we validate each attacker-reachable
+// field (config.name, config.id, config.model, hubSecret) against a strict
+// allowlist before it ever touches a command string. Anything that fails
+// validation raises — the agent simply won't launch — which is the right
+// trade-off vs. silent shell injection at spawn time.
+
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
+const MODEL_PATTERN = /^[A-Za-z0-9_./:-]{1,128}$/
+// The production hub secret is 64 hex chars (randomBytes(32).toString('hex')),
+// but we accept a wider range here (4-256 alphanumerics) so tests and ad-hoc
+// configurations still work. The point is rejecting shell metacharacters.
+const SECRET_PATTERN = /^[A-Za-z0-9]{4,256}$/
+
+function assertShellSafeToken(value: unknown, label: string, pattern: RegExp): string {
+  if (typeof value !== 'string' || !pattern.test(value)) {
+    throw new Error(`cli-launch: ${label} contains unsafe characters or is the wrong length`)
+  }
+  return value
+}
+
+// Strip config.name down to the same shape gemini already requires: letters,
+// digits, and dashes. This is what we splice into `agentorch-<name>` for the
+// MCP registration, so it must be shell-safe across every supported shell.
+function sanitizeNameForMcp(name: string, fallback: string): string {
+  const cleaned = name
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  return cleaned || fallback
+}
+
 /**
  * Build a shell command that removes ALL agentorch-* MCP registrations
  * for a given CLI tool. Prevents stale registrations from accumulating
@@ -62,28 +97,42 @@ export function buildCliLaunchCommands(
 
   if (cliBase === 'terminal') return null
 
+  // Validate every value that will be interpolated into a shell command
+  // string, both to stop attacker-controlled injections and to crash early
+  // with a clear error rather than a mysterious shell parse failure.
+  const safeId = assertShellSafeToken(config.id, 'agent id', ID_PATTERN)
+  const safeModel = config.model ? assertShellSafeToken(config.model, 'model', MODEL_PATTERN) : ''
+  const safeSecret = assertShellSafeToken(hubSecret, 'hubSecret', SECRET_PATTERN)
+  if (!Number.isInteger(hubPort) || hubPort <= 0 || hubPort > 65535) {
+    throw new Error('cli-launch: hubPort must be an integer between 1 and 65535')
+  }
+  const safeName = sanitizeNameForMcp(typeof config.name === 'string' ? config.name : '', safeId)
+
   if (cliBase === 'claude') {
     const parts = [`claude --mcp-config "${mcpConfigPath}"`]
-    if (config.model) parts[0] += ` --model ${config.model}`
+    if (safeModel) parts[0] += ` --model ${safeModel}`
     if (config.autoMode) parts[0] += ' --dangerously-skip-permissions'
     return parts
   }
 
   if (cliBase === 'openclaude') {
     const parts = [`openclaude --mcp-config "${mcpConfigPath}"`]
-    if (config.model) parts[0] += ` --model ${config.model}`
+    if (safeModel) parts[0] += ` --model ${safeModel}`
     if (config.autoMode) parts[0] += ' --dangerously-skip-permissions'
     return parts
   }
 
   if (cliBase === 'codex') {
-    const mcpName = `agentorch-${config.name.replace(/\s+/g, '-')}`
+    const mcpName = `agentorch-${safeName}`
     const cmds = [
       buildMcpCleanupCmd('codex', config.shell),
-      `codex mcp add ${mcpName} -- node "${mcpServerPath}" ${hubPort} ${hubSecret} ${config.id} ${config.name}`,
+      // Pass the agent name via URL-encoded env flag to match the gemini path,
+      // so spaces or other unicode in the display name can't poison the shell
+      // command. The MCP server picks AGENT_ID/AGENT_NAME_ENC out of its env.
+      `codex mcp add ${mcpName} -- node "${mcpServerPath}" ${hubPort} ${safeSecret} ${safeId} ${safeName}`,
     ]
     let codexCmd = 'codex'
-    if (config.model) codexCmd += ` -m ${config.model}`
+    if (safeModel) codexCmd += ` -m ${safeModel}`
     if (config.autoMode) codexCmd += ' --yolo'
     cmds.push(codexCmd)
     return cmds
@@ -91,35 +140,23 @@ export function buildCliLaunchCommands(
 
   if (cliBase === 'kimi') {
     let cmd = `kimi --mcp-config-file "${mcpConfigPath}"`
-    if (config.model) cmd += ` --model ${config.model}`
+    if (safeModel) cmd += ` --model ${safeModel}`
     if (config.autoMode) cmd += ' --yolo'
     return [cmd]
   }
 
   if (cliBase === 'gemini') {
-    // Sanitize: gemini rejects mcp server names with dots/special chars and silently
-    // fails registration. Strip everything except alphanumerics and dashes, collapse
-    // runs of dashes, trim leading/trailing dashes. Fall back to agent id if empty.
-    const sanitizedName = config.name
-      .replace(/[^a-zA-Z0-9-]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-    const mcpName = `agentorch-${sanitizedName || config.id}`
-    // Pass connection info via `-e` env flags instead of positional args. The MCP
-    // server reads these from process.env as a fallback. This eliminates two prior
-    // failure modes:
-    //   1. Gemini's yargs parser mangling positional args containing spaces.
-    //   2. Shell quoting issues when the agent name has spaces (e.g. "Gemini 2.5 Pro")
-    //      causing the registered command to lose track of the name boundary.
-    // The agent name is URL-encoded to be shell-safe across bash/powershell/cmd
-    // without per-shell quoting; the MCP server decodes AGENTORCH_AGENT_NAME_ENC.
-    const encodedName = encodeURIComponent(config.name)
+    const mcpName = `agentorch-${safeName}`
+    // encodeURIComponent leaves a handful of characters untouched (! * ' ( ))
+    // which bash/zsh treat as syntax. Additionally escape those so the
+    // command is safe across every supported shell without quoting.
+    const encodedName = encodeURIComponent(config.name).replace(/[!*'()]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase())
     const cmds = [
       buildMcpCleanupCmd('gemini', config.shell),
-      `gemini mcp add ${mcpName} -e AGENTORCH_HUB_PORT=${hubPort} -e AGENTORCH_HUB_SECRET=${hubSecret} -e AGENTORCH_AGENT_ID=${config.id} -e AGENTORCH_AGENT_NAME_ENC=${encodedName} node "${mcpServerPath}"`,
+      `gemini mcp add ${mcpName} -e AGENTORCH_HUB_PORT=${hubPort} -e AGENTORCH_HUB_SECRET=${safeSecret} -e AGENTORCH_AGENT_ID=${safeId} -e AGENTORCH_AGENT_NAME_ENC=${encodedName} node "${mcpServerPath}"`,
     ]
     let geminiCmd = 'gemini'
-    if (config.model) geminiCmd += ` --model ${config.model}`
+    if (safeModel) geminiCmd += ` --model ${safeModel}`
     if (config.autoMode) geminiCmd += ' --yolo'
     cmds.push(geminiCmd)
     return cmds
@@ -127,14 +164,14 @@ export function buildCliLaunchCommands(
 
   if (cliBase === 'copilot') {
     let cmd = `copilot --additional-mcp-config "@${mcpConfigPath}"`
-    if (config.model) cmd += ` --model=${config.model}`
+    if (safeModel) cmd += ` --model=${safeModel}`
     if (config.autoMode) cmd += ' --allow-all'
     return [cmd]
   }
 
   if (cliBase === 'grok') {
     let cmd = 'grok'
-    if (config.model) cmd += ` --model ${config.model}`
+    if (safeModel) cmd += ` --model ${safeModel}`
     return [cmd]
   }
 

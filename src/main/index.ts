@@ -689,8 +689,14 @@ function deliverNudge(agentName: string, nudge: string): void {
 
 function writeNudgeToPty(managed: ManagedPty, nudge: string): void {
   // Strip characters that PowerShell interprets as code: () [] {} $ ` " '
-  // The agent CLI just needs the message text, not shell-valid syntax
-  const safe = nudge.replace(/[()[\]{}$`"']/g, '')
+  // The agent CLI just needs the message text, not shell-valid syntax.
+  // Also scrub ASCII control chars (especially CR/LF) so an attacker who
+  // plants a newline in a scheduled prompt or remote /message body can't
+  // submit a second shell command by smuggling `\n<cmd>`. The explicit
+  // `\r` send below is the only line-terminator we want to deliver.
+  const safe = nudge
+    .replace(/[()[\]{}$`"']/g, '')
+    .replace(/[\x00-\x1F\x7F]/g, ' ')
 
   // Send text and Enter separately so TUIs don't treat '\r' as pasted text
   writeToPty(managed, safe)
@@ -1354,11 +1360,38 @@ function setupIPC(): void {
   })
 
   // File operation IPC handlers
+  // Resolve `requested` relative to `root`, follow symlinks, and reject anything
+  // that escapes `root`. Compared to a raw `startsWith` containment check this
+  // closes two holes: (a) sibling-directory prefix confusion (`/home/u/proj`
+  // vs `/home/u/proj-evil`) by requiring a trailing separator, and (b)
+  // symlink-based escape by comparing the realpath-resolved target.
+  function resolveInsideProject(root: string, requested: string): string | null {
+    if (typeof requested !== 'string' || requested.length === 0) return null
+    const projectRoot = path.resolve(root)
+    const resolved = path.resolve(projectRoot, requested)
+    let realResolved = resolved
+    try { realResolved = fs.realpathSync(resolved) } catch { /* ok if not yet created */ }
+    let anchor = realResolved
+    if (!fs.existsSync(realResolved)) {
+      try { anchor = fs.realpathSync(path.dirname(resolved)) } catch { anchor = path.dirname(resolved) }
+    }
+    let realRoot = projectRoot
+    try { realRoot = fs.realpathSync(projectRoot) } catch { /* keep lexical */ }
+    const normalize = (p: string): string => p.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '')
+    const nroot = normalize(realRoot)
+    const nres = normalize(realResolved)
+    const nanchor = normalize(anchor)
+    const rootWithSep = nroot + '/'
+    const inRoot = (p: string) => p === nroot || p.startsWith(rootWithSep)
+    if (!inRoot(nres) || !inRoot(nanchor)) return null
+    return resolved
+  }
+
   ipcMain.handle(IPC.FILE_LIST, async (_event, dirPath: string = '.') => {
     if (!projectManager.currentProject) return { items: [] }
     const projectPath = projectManager.currentProject.path
-    const resolved = path.resolve(projectPath, dirPath)
-    if (!resolved.toLowerCase().replace(/\\/g, '/').startsWith(projectPath.toLowerCase().replace(/\\/g, '/'))) return { items: [] }
+    const resolved = resolveInsideProject(projectPath, dirPath)
+    if (!resolved) return { items: [] }
 
     try {
       const entries = fs.readdirSync(resolved, { withFileTypes: true })
@@ -1384,8 +1417,8 @@ function setupIPC(): void {
   ipcMain.handle(IPC.FILE_READ, async (_event, filePath: string) => {
     if (!projectManager.currentProject) return null
     const projectPath = projectManager.currentProject.path
-    const resolved = path.resolve(projectPath, filePath)
-    if (!resolved.toLowerCase().replace(/\\/g, '/').startsWith(projectPath.toLowerCase().replace(/\\/g, '/'))) return null
+    const resolved = resolveInsideProject(projectPath, filePath)
+    if (!resolved) return null
 
     try {
       const content = fs.readFileSync(resolved, 'utf-8')
@@ -1398,8 +1431,8 @@ function setupIPC(): void {
   ipcMain.handle(IPC.FILE_WRITE, async (_event, filePath: string, content: string) => {
     if (!projectManager.currentProject) return false
     const projectPath = projectManager.currentProject.path
-    const resolved = path.resolve(projectPath, filePath)
-    if (!resolved.toLowerCase().replace(/\\/g, '/').startsWith(projectPath.toLowerCase().replace(/\\/g, '/'))) return false
+    const resolved = resolveInsideProject(projectPath, filePath)
+    if (!resolved) return false
 
     try {
       const dir = path.dirname(resolved)
@@ -1666,36 +1699,22 @@ function setupIPC(): void {
     catch (e: any) { return { error: e.message } }
   })
 
-  // Bug report — posts directly to GitHub Issues via API (no user login needed)
-  // Token is obfuscated (not plaintext) to avoid automated scanners. Issues-only permission on a single repo.
-  const _bk = 'AgentOrchBugReporter2026'
-  const _bt = [38,14,17,6,1,45,45,19,9,54,42,86,99,36,55,36,61,53,47,59,2,70,6,82,115,33,49,93,76,21,38,19,14,29,6,13,7,12,21,59,38,38,41,59,64,94,1,102,53,42,51,54,0,28,11,55,80,9,64,29,37,14,32,24,67,61,53,58,113,95,125,64,13,17,13,40,70,12,58,39,33,16,59,47,1,43,34,43,55,66,54,69,2]
-  const _deobf = (): string => _bt.map((c, i) => String.fromCharCode(c ^ _bk.charCodeAt(i % _bk.length))).join('')
-
+  // Bug report — opens GitHub's "new issue" page with the report pre-filled.
+  // Previously this handler posted to the GitHub API using an embedded, XOR-
+  // obfuscated PAT shipped in every binary. That credential is recoverable in
+  // under a second from the compiled output, which turns the app into a
+  // write-able (spam-able, issue-rewriting) proxy for the project repo once
+  // the binary leaks anywhere. Handing the submission off to the user's own
+  // browser keeps the auth boundary on their GitHub account, not ours.
   ipcMain.handle(IPC.BUG_REPORT_SUBMIT, async (_event, report: { title: string; body: string }) => {
-    const token = _deobf()
     try {
-      const res = await fetch('https://api.github.com/repos/natebag/AgentOrch/issues', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: report.title,
-          body: report.body,
-          labels: ['bug']
-        })
-      })
-      if (!res.ok) {
-        const err = await res.text()
-        return { success: false, method: 'api', error: `GitHub API ${res.status}: ${err}` }
-      }
-      const issue = await res.json()
-      return { success: true, method: 'api', issueUrl: issue.html_url, number: issue.number }
+      const title = typeof report?.title === 'string' ? report.title.slice(0, 200) : ''
+      const body = typeof report?.body === 'string' ? report.body.slice(0, 20000) : ''
+      const url = `https://github.com/natebag/AgentOrch/issues/new?labels=bug&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+      await shell.openExternal(url)
+      return { success: true, method: 'browser', issueUrl: url }
     } catch (err: any) {
-      return { success: false, method: 'api', error: err.message }
+      return { success: false, method: 'browser', error: err?.message || 'Could not open browser' }
     }
   })
 

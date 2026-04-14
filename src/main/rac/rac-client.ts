@@ -7,7 +7,22 @@ export class RacClient {
   private activeSessions: RacSession[] = []
 
   setServer(url: string): void {
-    this.serverUrl = url.replace(/\/+$/, '') // strip trailing slash
+    const trimmed = url.replace(/\/+$/, '') // strip trailing slash
+    // The hub secret is included in the rent() payload. If the RAC server isn't
+    // loopback, require HTTPS so the secret isn't carried in cleartext over the
+    // LAN where a passive observer could lift it and authenticate to the hub.
+    let parsed: URL
+    try {
+      parsed = new URL(trimmed)
+    } catch {
+      throw new Error(`Invalid R.A.C. server URL: ${url}`)
+    }
+    const host = parsed.hostname
+    const isLoopback = host === '127.0.0.1' || host === 'localhost' || host === '::1'
+    if (parsed.protocol !== 'https:' && !isLoopback) {
+      throw new Error(`R.A.C. server URL must use https:// when not pointing at localhost (got ${parsed.protocol}//${host})`)
+    }
+    this.serverUrl = trimmed
   }
 
   getServer(): string {
