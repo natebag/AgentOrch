@@ -9,8 +9,9 @@
     "test": "tests"
   },
   "scripts": {
+    "postinstall": "node scripts/rebuild-native.mjs",
     "dev": "npm run build:mcp && electron-vite dev",
-    "rebuild:native": "electron-rebuild -o better-sqlite3,node-pty",
+    "rebuild:native": "node scripts/rebuild-native.mjs",
     "build": "npm run build:mcp && electron-vite build",
     "build:mcp": "node scripts/build-mcp-server.mjs",
     "preview": "electron-vite preview",
