@@ -8,8 +8,8 @@
     "test": "tests"
   },
   "scripts": {
-    "postinstall": "electron-rebuild -o better-sqlite3,node-pty",
     "dev": "npm run build:mcp && electron-vite dev",
+    "rebuild:native": "electron-rebuild -o better-sqlite3,node-pty",
     "build": "npm run build:mcp && electron-vite build",
     "build:mcp": "node scripts/build-mcp-server.mjs",
     "preview": "electron-vite preview",
@@ -21,7 +21,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@electron/rebuild": "^4.1.1",
+    "@electron/rebuild": "^4.0.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/react": "^19.2.14",
