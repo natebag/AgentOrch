@@ -536,7 +536,14 @@ function reconnectAgent(config: AgentConfig): void {
     mcpServerPath
   })
 
+  // Dual-emit COG_* (new) and AGENTORCH_* (legacy) env vars so in-flight agents
+  // keep working across the rebrand. MCP server reads COG_* first, falls back
+  // to AGENTORCH_*. The AGENTORCH_* aliases can be dropped in a future release.
   const mcpEnv: Record<string, string> = {
+    COG_HUB_PORT: String(hub.port),
+    COG_HUB_SECRET: hub.secret,
+    COG_AGENT_ID: config.id,
+    COG_AGENT_NAME: config.name,
     AGENTORCH_HUB_PORT: String(hub.port),
     AGENTORCH_HUB_SECRET: hub.secret,
     AGENTORCH_AGENT_ID: config.id,
@@ -549,7 +556,10 @@ function reconnectAgent(config: AgentConfig): void {
     if (config.model) mcpEnv.OPENAI_MODEL = config.model
     if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
   }
-  if (config.tabId) mcpEnv.AGENTORCH_TAB_ID = config.tabId
+  if (config.tabId) {
+    mcpEnv.COG_TAB_ID = config.tabId
+    mcpEnv.AGENTORCH_TAB_ID = config.tabId
+  }
 
   hub.registry.register(config)
   const initialPrompt = buildReconnectPrompt(config)
@@ -1089,7 +1099,12 @@ function setupIPC(): void {
 
     // Env vars for the MCP server — set on the PTY so child processes inherit them.
     // Codex spawns MCP servers as subprocesses, so they'll pick these up.
+    // Dual-emit COG_* + AGENTORCH_* for in-flight agent compatibility across rebrand.
     const mcpEnv: Record<string, string> = {
+      COG_HUB_PORT: String(hub.port),
+      COG_HUB_SECRET: hub.secret,
+      COG_AGENT_ID: config.id,
+      COG_AGENT_NAME: config.name,
       AGENTORCH_HUB_PORT: String(hub.port),
       AGENTORCH_HUB_SECRET: hub.secret,
       AGENTORCH_AGENT_ID: config.id,
@@ -1102,7 +1117,10 @@ function setupIPC(): void {
       if (config.model) mcpEnv.OPENAI_MODEL = config.model
       if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
     }
-    if (config.tabId) mcpEnv.AGENTORCH_TAB_ID = config.tabId
+    if (config.tabId) {
+      mcpEnv.COG_TAB_ID = config.tabId
+      mcpEnv.AGENTORCH_TAB_ID = config.tabId
+    }
 
     hub.registry.register(config)
     hub.agentMetrics.register(config.name)

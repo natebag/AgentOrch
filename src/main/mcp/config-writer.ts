@@ -11,15 +11,22 @@ interface McpConfigOptions {
 }
 
 export function writeAgentMcpConfig(opts: McpConfigOptions): string {
-  const fileName = `agentorch-${opts.agentId}-mcp.json`
+  const fileName = `cog-${opts.agentId}-mcp.json`
   const filePath = path.join(os.tmpdir(), fileName)
 
+  // Dual-emit COG_* (new) + AGENTORCH_* (legacy) env vars. The MCP server
+  // prefers COG_* but falls back to AGENTORCH_*, so in-flight agents keep
+  // working across the rebrand.
   const config = {
     mcpServers: {
-      agentorch: {
+      cog: {
         command: 'node',
         args: [opts.mcpServerPath],
         env: {
+          COG_HUB_PORT: String(opts.hubPort),
+          COG_HUB_SECRET: opts.hubSecret,
+          COG_AGENT_ID: opts.agentId,
+          COG_AGENT_NAME: opts.agentName,
           AGENTORCH_HUB_PORT: String(opts.hubPort),
           AGENTORCH_HUB_SECRET: opts.hubSecret,
           AGENTORCH_AGENT_ID: opts.agentId,

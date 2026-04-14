@@ -36,8 +36,8 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )).toEqual([
-      "gemini mcp list 2>$null | ForEach-Object { if ($_ -match '(agentorch[^\\s:]+)') { gemini mcp remove $Matches[1] 2>$null } }",
-      'gemini mcp add agentorch-worker-1 -e AGENTORCH_HUB_PORT=7777 -e AGENTORCH_HUB_SECRET=secret -e AGENTORCH_AGENT_ID=agent-1 -e AGENTORCH_AGENT_NAME_ENC=worker-1 node "C:\\temp\\mcp-server.js"',
+      "gemini mcp list 2>$null | ForEach-Object { if ($_ -match '((?:cog|agentorch)-[^\\s:]+)') { gemini mcp remove $Matches[1] 2>$null } }",
+      'gemini mcp add cog-worker-1 -e COG_HUB_PORT=7777 -e COG_HUB_SECRET=secret -e COG_AGENT_ID=agent-1 -e COG_AGENT_NAME_ENC=worker-1 -e AGENTORCH_HUB_PORT=7777 -e AGENTORCH_HUB_SECRET=secret -e AGENTORCH_AGENT_ID=agent-1 -e AGENTORCH_AGENT_NAME_ENC=worker-1 node "C:\\temp\\mcp-server.js"',
       'gemini --model gemini-2.5-pro --yolo'
     ])
   })
@@ -51,7 +51,7 @@ describe('buildCliLaunchCommands', () => {
       'secret'
     )!
     const addCmd = cmds.find(c => c.startsWith('gemini mcp add'))!
-    expect(addCmd).toContain('gemini mcp add agentorch-worker-1 -e ')
+    expect(addCmd).toContain('gemini mcp add cog-worker-1 -e ')
     expect(addCmd).not.toContain(' -- node ')
   })
 
@@ -68,13 +68,15 @@ describe('buildCliLaunchCommands', () => {
     )!
     const addCmd = cmds.find(c => c.startsWith('gemini mcp add'))!
     // Name is sanitized for the mcp server name (no dots, no spaces).
-    expect(addCmd).toContain('gemini mcp add agentorch-RESEARCHER-Gemini-2-5-Pro ')
+    expect(addCmd).toContain('gemini mcp add cog-RESEARCHER-Gemini-2-5-Pro ')
     // Connection info passed via env flags, not positional args.
+    expect(addCmd).toContain('-e COG_HUB_PORT=7777')
+    expect(addCmd).toContain('-e COG_HUB_SECRET=secret')
+    expect(addCmd).toContain('-e COG_AGENT_ID=agent-1')
+    // Legacy env vars also emitted for in-flight agents spawned before the rebrand.
     expect(addCmd).toContain('-e AGENTORCH_HUB_PORT=7777')
-    expect(addCmd).toContain('-e AGENTORCH_HUB_SECRET=secret')
-    expect(addCmd).toContain('-e AGENTORCH_AGENT_ID=agent-1')
     // Agent name is URL-encoded so spaces and dots survive any shell intact.
-    expect(addCmd).toContain('-e AGENTORCH_AGENT_NAME_ENC=RESEARCHER%20Gemini%202.5%20Pro')
+    expect(addCmd).toContain('-e COG_AGENT_NAME_ENC=RESEARCHER%20Gemini%202.5%20Pro')
     // The script path is the only positional arg after `node` — no agent name leakage.
     expect(addCmd).toContain('node "/tmp/mcp-server.js"')
     expect(addCmd).not.toMatch(/node "[^"]+" \d+ secret/)
@@ -90,7 +92,7 @@ describe('buildCliLaunchCommands', () => {
     )!
     const addCmd = cmds.find(c => c.startsWith('gemini mcp add'))!
     // Dots, spaces, and parens are collapsed to a single dash.
-    expect(addCmd).toContain('gemini mcp add agentorch-Worker-v1-alpha ')
+    expect(addCmd).toContain('gemini mcp add cog-Worker-v1-alpha ')
   })
 
   it('routes Gemini cmd-shell cleanup through PowerShell to avoid Unicode dropout', () => {
@@ -116,8 +118,8 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )).toEqual([
-      "codex mcp list 2>$null | Where-Object { $_ -match '^agentorch' } | ForEach-Object { codex mcp remove ($_ -split '\\s+')[0] 2>$null }",
-      'codex mcp add agentorch-worker-1 -- node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
+      "codex mcp list 2>$null | Where-Object { $_ -match '^(cog|agentorch)' } | ForEach-Object { codex mcp remove ($_ -split '\\s+')[0] 2>$null }",
+      'codex mcp add cog-worker-1 -- node "C:\\temp\\mcp-server.js" 7777 secret agent-1 worker-1',
       'codex -m o3 --yolo'
     ])
   })
@@ -130,7 +132,7 @@ describe('buildCliLaunchCommands', () => {
       7777,
       'secret'
     )!
-    expect(cmds[0]).toContain('findstr /B "agentorch"')
+    expect(cmds[0]).toContain('findstr /B /R "^cog ^agentorch"')
     expect(cmds[0]).toContain('codex mcp remove %i')
   })
 
@@ -157,9 +159,9 @@ describe('buildCliLaunchCommands', () => {
       'secret'
     )!
     // Must NOT anchor grep to start of line (^) since Gemini prefixes with status icon
-    expect(cmds[0]).not.toContain("grep '^agentorch'")
-    // Must use grep -o to extract just the agentorch name
-    expect(cmds[0]).toContain("grep -o 'agentorch[^ :]*'")
+    expect(cmds[0]).not.toContain("grep '^cog'")
+    // Must use grep -oE to extract both cog-* and legacy agentorch-* names
+    expect(cmds[0]).toContain("grep -oE '(cog|agentorch)-[^ :]*'")
   })
 
   it('launches Copilot with session-scoped MCP config and allow-all mode', () => {

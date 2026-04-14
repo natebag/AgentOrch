@@ -5,31 +5,37 @@ import { z } from 'zod'
 // Support both CLI args (for codex/kimi) and env vars (for claude).
 // CLI args: node index.js <port> <secret> <agent_id> <agent_name...>
 // Agent name can contain spaces — everything from arg[3] onward is joined.
+// Env var resolution: prefer COG_* (new), fall back to AGENTORCH_* (legacy) so
+// in-flight agents spawned before the rebrand keep working.
+const env = process.env
 const args = process.argv.slice(2)
-const HUB_PORT = args[0] || process.env.AGENTORCH_HUB_PORT
-const HUB_SECRET = args[1] || process.env.AGENTORCH_HUB_SECRET
-const AGENT_ID = args[2] || process.env.AGENTORCH_AGENT_ID
+const HUB_PORT = args[0] || env.COG_HUB_PORT || env.AGENTORCH_HUB_PORT
+const HUB_SECRET = args[1] || env.COG_HUB_SECRET || env.AGENTORCH_HUB_SECRET
+const AGENT_ID = args[2] || env.COG_AGENT_ID || env.AGENTORCH_AGENT_ID
 // Agent name resolution priority:
 //   1. Positional args (codex via `mcp add ... -- node script port secret id name...`)
-//   2. AGENTORCH_AGENT_NAME env var (claude/openclaude/kimi via mcp-config.json)
-//   3. AGENTORCH_AGENT_NAME_ENC env var, URL-decoded (gemini via `-e` flags — encoding
-//      avoids cross-shell quoting issues for names with spaces, dots, or special chars)
+//   2. COG_AGENT_NAME / AGENTORCH_AGENT_NAME env var (claude/openclaude/kimi via mcp-config.json)
+//   3. COG_AGENT_NAME_ENC / AGENTORCH_AGENT_NAME_ENC env var, URL-decoded (gemini via `-e` flags
+//      — encoding avoids cross-shell quoting issues for names with spaces/dots/special chars)
 let resolvedAgentName: string | undefined =
-  (args.length > 3 ? args.slice(3).join(' ') : undefined) || process.env.AGENTORCH_AGENT_NAME
-if (!resolvedAgentName && process.env.AGENTORCH_AGENT_NAME_ENC) {
+  (args.length > 3 ? args.slice(3).join(' ') : undefined) ||
+  env.COG_AGENT_NAME ||
+  env.AGENTORCH_AGENT_NAME
+const encodedName = env.COG_AGENT_NAME_ENC || env.AGENTORCH_AGENT_NAME_ENC
+if (!resolvedAgentName && encodedName) {
   try {
-    resolvedAgentName = decodeURIComponent(process.env.AGENTORCH_AGENT_NAME_ENC)
+    resolvedAgentName = decodeURIComponent(encodedName)
   } catch {
-    resolvedAgentName = process.env.AGENTORCH_AGENT_NAME_ENC
+    resolvedAgentName = encodedName
   }
 }
 const AGENT_NAME = resolvedAgentName
-const TAB_ID = process.env.AGENTORCH_TAB_ID || undefined
+const TAB_ID = env.COG_TAB_ID || env.AGENTORCH_TAB_ID || undefined
 
 if (!HUB_PORT || !HUB_SECRET || !AGENT_ID || !AGENT_NAME) {
   console.error('Cog MCP server: missing connection info.')
   console.error('Usage: node index.js <port> <secret> <agent_id> <agent_name>')
-  console.error('Or set AGENTORCH_HUB_PORT, AGENTORCH_HUB_SECRET, AGENTORCH_AGENT_ID, AGENTORCH_AGENT_NAME')
+  console.error('Or set COG_HUB_PORT, COG_HUB_SECRET, COG_AGENT_ID, COG_AGENT_NAME')
   process.exit(1)
 }
 

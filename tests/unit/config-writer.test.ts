@@ -24,13 +24,16 @@ describe('MCP Config Writer', () => {
     createdFiles.push(filePath)
 
     expect(existsSync(filePath)).toBe(true)
-    expect(filePath).toContain('agentorch-test-agent')
+    expect(filePath).toContain('cog-test-agent')
 
     const content = JSON.parse(readFileSync(filePath, 'utf-8'))
     expect(content.mcpServers).toBeDefined()
-    expect(content.mcpServers.agentorch).toBeDefined()
-    expect(content.mcpServers.agentorch.command).toBe('node')
-    expect(content.mcpServers.agentorch.args).toContain('/path/to/mcp-server.js')
+    expect(content.mcpServers.cog).toBeDefined()
+    expect(content.mcpServers.cog.command).toBe('node')
+    expect(content.mcpServers.cog.args).toContain('/path/to/mcp-server.js')
+    // Dual-emit env vars: COG_* (new) + AGENTORCH_* (legacy for in-flight agents)
+    expect(content.mcpServers.cog.env.COG_HUB_PORT).toBe('9999')
+    expect(content.mcpServers.cog.env.AGENTORCH_HUB_PORT).toBe('9999')
   })
 
   it('cleans up config file', () => {
