@@ -42,10 +42,12 @@ declare global {
       // Remote View
       enableRemoteView: () => Promise<{ ok: boolean }>
       disableRemoteView: () => Promise<{ ok: boolean }>
-      getRemoteViewState: () => Promise<{ enabled: boolean; publicUrl: string | null; connectionCount: number; lastActivity: number | null }>
+      enableRemoteLan: () => Promise<{ ok: boolean; error?: string }>
+      disableRemoteLan: () => Promise<{ ok: boolean }>
+      getRemoteViewState: () => Promise<{ enabled: boolean; publicUrl: string | null; lanUrl: string | null; lanEnabled: boolean; connectionCount: number; lastActivity: number | null }>
       killRemoteSessions: () => Promise<{ ok: boolean; newUrl?: string | null }>
       regenerateRemoteToken: () => Promise<{ ok: boolean; newUrl?: string | null }>
-      onRemoteStatusUpdate: (cb: (status: { enabled: boolean; publicUrl: string | null; connectionCount: number; lastActivity: number | null }) => void) => () => void
+      onRemoteStatusUpdate: (cb: (status: { enabled: boolean; publicUrl: string | null; lanUrl: string | null; lanEnabled: boolean; connectionCount: number; lastActivity: number | null }) => void) => () => void
       onRemoteSetupProgress: (cb: (progress: { stage: 'downloading' | 'starting' | 'ready' | 'error'; message?: string }) => void) => () => void
       // Stale task alert snooze
       getStaleAlertSnooze: () => Promise<{ muteUntil: number | null }>

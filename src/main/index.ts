@@ -63,7 +63,9 @@ let remoteTokenManager: TokenManager | null = null
 let cloudflaredManager: CloudflaredManager | null = null
 let remoteServer: RemoteServer | null = null
 let remoteHttpServer: HttpServer | null = null
+let remoteLanServer: HttpServer | null = null  // LAN-accessible listener (bound to 0.0.0.0)
 let remotePublicUrl: string | null = null
+let remoteLanUrl: string | null = null  // http://<lan-ip>:<port>/r/<token>/
 let remoteStatusTicker: ReturnType<typeof setInterval> | null = null
 let workshopPasscodeHash: string | null = null
 let cachedWorkspaceState: any = null
@@ -136,6 +138,8 @@ function emitRemoteStatus(): void {
   mainWindow.webContents.send(IPC.REMOTE_STATUS_UPDATE, {
     enabled: remoteServer !== null,
     publicUrl: remotePublicUrl,
+    lanUrl: remoteLanUrl,
+    lanEnabled: remoteLanServer !== null,
     connectionCount: remoteTokenManager?.getConnectionCount() ?? 0,
     lastActivity: remoteTokenManager?.getLastActivity() ?? null
   })
@@ -338,14 +342,86 @@ async function disableRemoteView(): Promise<void> {
     await new Promise<void>((resolve) => remoteHttpServer!.close(() => resolve()))
     remoteHttpServer = null
   }
+  if (remoteLanServer) {
+    await new Promise<void>((resolve) => remoteLanServer!.close(() => resolve()))
+    remoteLanServer = null
+  }
   if (remoteTokenManager) remoteTokenManager.invalidate()
   remoteServer = null
   remoteTokenManager = null
   remotePublicUrl = null
+  remoteLanUrl = null
   if (remoteStatusTicker) {
     clearInterval(remoteStatusTicker)
     remoteStatusTicker = null
   }
+  emitRemoteStatus()
+}
+
+/**
+ * Pick a LAN-reachable IPv4 address. Prefers 192.168.x.x (home WiFi), then
+ * 10.x.x.x and 172.16-31.x.x (private network ranges). Skips loopback,
+ * link-local, and virtual adapters where possible.
+ */
+function getLanIp(): string | null {
+  const os = require('os')
+  const ifaces = os.networkInterfaces()
+  const candidates: { ip: string; score: number }[] = []
+  for (const name of Object.keys(ifaces)) {
+    const list = ifaces[name] || []
+    for (const iface of list) {
+      if (iface.family !== 'IPv4' || iface.internal) continue
+      const ip = iface.address
+      // Score private ranges, prefer common home WiFi
+      let score = 0
+      if (ip.startsWith('192.168.')) score = 100
+      else if (ip.startsWith('10.')) score = 50
+      else if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) score = 30
+      else continue  // skip non-private IPs (public, exotic)
+      // De-prioritize obvious virtual adapters by name
+      if (/(virtual|vmware|vbox|hyper-v|wsl|docker)/i.test(name)) score -= 50
+      candidates.push({ ip, score })
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score)
+  return candidates[0]?.ip ?? null
+}
+
+async function enableLanAccess(): Promise<{ ok: boolean; error?: string }> {
+  if (!remoteServer || !remoteTokenManager) {
+    return { ok: false, error: 'Enable Remote View first' }
+  }
+  if (remoteLanServer) return { ok: true }  // already running
+
+  const lanIp = getLanIp()
+  if (!lanIp) return { ok: false, error: 'No LAN interface detected' }
+
+  const expressApp = remoteServer.getApp()
+  try {
+    remoteLanServer = await new Promise<HttpServer>((resolve, reject) => {
+      const srv = expressApp.listen(0, '0.0.0.0', () => resolve(srv))
+      srv.on('error', reject)
+    })
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+  const addr = remoteLanServer.address()
+  if (!addr || typeof addr === 'string') {
+    return { ok: false, error: 'Failed to bind LAN server' }
+  }
+  const token = remoteTokenManager.getCurrentToken()
+  remoteLanUrl = `http://${lanIp}:${addr.port}/r/${token}/`
+  console.log(`[RemoteView] LAN access ready: ${remoteLanUrl}`)
+  emitRemoteStatus()
+  return { ok: true }
+}
+
+async function disableLanAccess(): Promise<void> {
+  if (remoteLanServer) {
+    await new Promise<void>((resolve) => remoteLanServer!.close(() => resolve()))
+    remoteLanServer = null
+  }
+  remoteLanUrl = null
   emitRemoteStatus()
 }
 
@@ -1918,18 +1994,40 @@ function setupIPC(): void {
     return {
       enabled: remoteServer !== null,
       publicUrl: remotePublicUrl,
+      lanUrl: remoteLanUrl,
+      lanEnabled: remoteLanServer !== null,
       connectionCount: remoteTokenManager?.getConnectionCount() ?? 0,
       lastActivity: remoteTokenManager?.getLastActivity() ?? null
     }
   })
 
+  ipcMain.handle(IPC.REMOTE_LAN_ENABLE, async () => {
+    return await enableLanAccess()
+  })
+
+  ipcMain.handle(IPC.REMOTE_LAN_DISABLE, async () => {
+    await disableLanAccess()
+    return { ok: true }
+  })
+
+  // Helper: rotate URLs after a token change so both tunnel and LAN URLs reflect the new token
+  function rotateUrlsAfterTokenChange(): void {
+    if (!remoteTokenManager) return
+    const newToken = remoteTokenManager.getCurrentToken()
+    if (remotePublicUrl) {
+      const baseUrl = remotePublicUrl.split('/r/')[0]
+      remotePublicUrl = `${baseUrl}/r/${newToken}/`
+    }
+    if (remoteLanUrl) {
+      const baseUrl = remoteLanUrl.split('/r/')[0]
+      remoteLanUrl = `${baseUrl}/r/${newToken}/`
+    }
+  }
+
   ipcMain.handle(IPC.REMOTE_KILL_SESSIONS, () => {
     if (!remoteTokenManager) return { ok: false }
     remoteTokenManager.killAllSessions()
-    if (remotePublicUrl) {
-      const baseUrl = remotePublicUrl.split('/r/')[0]
-      remotePublicUrl = `${baseUrl}/r/${remoteTokenManager.getCurrentToken()}/`
-    }
+    rotateUrlsAfterTokenChange()
     emitRemoteStatus()
     return { ok: true, newUrl: remotePublicUrl }
   })
@@ -1937,10 +2035,7 @@ function setupIPC(): void {
   ipcMain.handle(IPC.REMOTE_REGENERATE, () => {
     if (!remoteTokenManager) return { ok: false }
     remoteTokenManager.generate()
-    if (remotePublicUrl) {
-      const baseUrl = remotePublicUrl.split('/r/')[0]
-      remotePublicUrl = `${baseUrl}/r/${remoteTokenManager.getCurrentToken()}/`
-    }
+    rotateUrlsAfterTokenChange()
     emitRemoteStatus()
     return { ok: true, newUrl: remotePublicUrl }
   })

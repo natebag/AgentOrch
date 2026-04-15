@@ -137,6 +137,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Remote View
   enableRemoteView: () => ipcRenderer.invoke(IPC.REMOTE_ENABLE),
   disableRemoteView: () => ipcRenderer.invoke(IPC.REMOTE_DISABLE),
+  enableRemoteLan: () => ipcRenderer.invoke(IPC.REMOTE_LAN_ENABLE),
+  disableRemoteLan: () => ipcRenderer.invoke(IPC.REMOTE_LAN_DISABLE),
   getRemoteViewState: () => ipcRenderer.invoke(IPC.REMOTE_STATE),
   killRemoteSessions: () => ipcRenderer.invoke(IPC.REMOTE_KILL_SESSIONS),
   regenerateRemoteToken: () => ipcRenderer.invoke(IPC.REMOTE_REGENERATE),

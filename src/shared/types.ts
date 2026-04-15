@@ -174,6 +174,8 @@ export const IPC = {
   REMOTE_REGENERATE: 'remote:regenerate',
   REMOTE_STATUS_UPDATE: 'remote:status-update',
   REMOTE_SETUP_PROGRESS: 'remote:setup-progress',
+  REMOTE_LAN_ENABLE: 'remote:lan-enable',
+  REMOTE_LAN_DISABLE: 'remote:lan-disable',
   // Workshop passcode
   WORKSHOP_SET_PASSCODE: 'workshop:set-passcode',
   WORKSHOP_GET_PASSCODE_SET: 'workshop:get-passcode-set',

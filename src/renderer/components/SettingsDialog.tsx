@@ -53,7 +53,8 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
   }
 
   const [settings, setSettings] = useState<Record<string, any>>({})
-  const [remoteState, setRemoteState] = useState({ enabled: false, publicUrl: null as string | null, connectionCount: 0, lastActivity: null as number | null })
+  const [remoteState, setRemoteState] = useState({ enabled: false, publicUrl: null as string | null, lanUrl: null as string | null, lanEnabled: false, connectionCount: 0, lastActivity: null as number | null })
+  const [whichQr, setWhichQr] = useState<'tunnel' | 'lan'>('tunnel')
   const [setupProgress, setSetupProgress] = useState<{ stage: string; message?: string } | null>(null)
   const [showQr, setShowQr] = useState(false)
   const [plainQr, setPlainQr] = useState(false)
@@ -63,14 +64,15 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
   const [passcodeInput, setPasscodeInput] = useState('')
   const [showPasscodeInput, setShowPasscodeInput] = useState(false)
 
+  const qrSourceUrl = whichQr === 'lan' ? remoteState.lanUrl : remoteState.publicUrl
   const qrSvg = useMemo(() => {
-    if (!remoteState.publicUrl) return null
+    if (!qrSourceUrl) return null
     try {
       // Plain mode: lower error correction + no logo overlay for ancient QR
       // readers (Nintendo 3DS, older feature phones). Default: ECL 'H' so the
       // centered cog logo doesn't break scannability on modern scanners.
       return new QRCode({
-        content: remoteState.publicUrl,
+        content: qrSourceUrl,
         padding: 2,
         width: 220,
         height: 220,
@@ -81,7 +83,7 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
     } catch {
       return null
     }
-  }, [remoteState.publicUrl, plainQr])
+  }, [qrSourceUrl, plainQr])
 
   useEffect(() => {
     electronAPI.getSettings().then(s => {
@@ -461,6 +463,7 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
 
           {remoteState.enabled && remoteState.publicUrl && (
             <>
+              <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Tunnel URL (internet)</div>
               <div style={{
                 padding: '8px', backgroundColor: '#252525', borderRadius: '4px',
                 fontSize: '11px', color: '#aaa', wordBreak: 'break-all'
@@ -471,12 +474,87 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
                 <button onClick={copyUrl} style={{
                   flex: 1, padding: '8px', backgroundColor: '#3b82f6', color: '#fff',
                   border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
-                }}>📋 Copy URL</button>
+                }}>📋 Copy Tunnel URL</button>
                 <button onClick={() => setShowQr(v => !v)} style={{
                   flex: 1, padding: '8px', backgroundColor: '#444', color: '#e0e0e0',
                   border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
                 }}>{showQr ? '✕ Hide QR' : '📱 Show QR'}</button>
               </div>
+
+              {/* LAN access toggle + URL */}
+              <label style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '8px', backgroundColor: '#252525', borderRadius: '4px', cursor: 'pointer', marginTop: '6px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '13px', color: '#e0e0e0' }}>Enable LAN access</div>
+                  <div style={{ fontSize: '11px', color: '#666' }}>Same-WiFi devices can connect over plain HTTP — no internet needed</div>
+                </div>
+                <div
+                  onClick={async () => {
+                    if (remoteState.lanEnabled) await electronAPI.disableRemoteLan()
+                    else await electronAPI.enableRemoteLan()
+                  }}
+                  style={{
+                    width: 40, height: 22, borderRadius: 11,
+                    backgroundColor: remoteState.lanEnabled ? '#4caf50' : '#444',
+                    position: 'relative', cursor: 'pointer', transition: 'background-color 0.2s',
+                    flexShrink: 0, marginLeft: 12
+                  }}
+                >
+                  <div style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    backgroundColor: '#fff', position: 'absolute', top: 2,
+                    left: remoteState.lanEnabled ? 20 : 2,
+                    transition: 'left 0.2s'
+                  }} />
+                </div>
+              </label>
+
+              {remoteState.lanEnabled && remoteState.lanUrl && (
+                <>
+                  <div style={{ fontSize: '10px', color: '#6ee7b7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LAN URL (same WiFi only)</div>
+                  <div style={{
+                    padding: '8px', backgroundColor: '#1a2e1a', borderRadius: '4px',
+                    fontSize: '11px', color: '#6ee7b7', wordBreak: 'break-all', border: '1px solid #2a4a2a'
+                  }}>
+                    {remoteState.lanUrl}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => { if (remoteState.lanUrl) navigator.clipboard.writeText(remoteState.lanUrl) }}
+                      style={{
+                        flex: 1, padding: '8px', backgroundColor: '#1a2e1a', color: '#6ee7b7',
+                        border: '1px solid #2a4a2a', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
+                      }}
+                    >📋 Copy LAN URL</button>
+                  </div>
+                </>
+              )}
+
+              {/* QR source selector — only show if both URLs are available */}
+              {showQr && remoteState.lanEnabled && remoteState.lanUrl && (
+                <div style={{ display: 'flex', gap: '4px', fontSize: '11px' }}>
+                  <button
+                    onClick={() => setWhichQr('tunnel')}
+                    style={{
+                      flex: 1, padding: '6px', borderRadius: '4px', cursor: 'pointer',
+                      background: whichQr === 'tunnel' ? '#3b82f6' : '#2a2a2a',
+                      color: whichQr === 'tunnel' ? '#fff' : '#888',
+                      border: whichQr === 'tunnel' ? 'none' : '1px solid #444'
+                    }}
+                  >Tunnel QR</button>
+                  <button
+                    onClick={() => setWhichQr('lan')}
+                    style={{
+                      flex: 1, padding: '6px', borderRadius: '4px', cursor: 'pointer',
+                      background: whichQr === 'lan' ? '#4caf50' : '#2a2a2a',
+                      color: whichQr === 'lan' ? '#fff' : '#888',
+                      border: whichQr === 'lan' ? 'none' : '1px solid #444'
+                    }}
+                  >LAN QR</button>
+                </div>
+              )}
 
               {showQr && qrSvg && (
                 <div style={{
