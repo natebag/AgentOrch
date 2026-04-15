@@ -74,6 +74,7 @@ export interface RemoteServerDeps {
     width?: number
     height?: number
   }) => void
+  onWorkshopPanelToggle: (update: { type: string; action: 'open' | 'close' | 'toggle' }) => void
 }
 
 // Find the static directory at runtime. In electron-vite dev mode, __dirname
@@ -356,6 +357,17 @@ export class RemoteServer {
       if (typeof width === 'number' && width > 0) update.width = width
       if (typeof height === 'number' && height > 0) update.height = height
       this.deps.onWorkshopWindowUpdate(update)
+      res.json({ ok: true })
+    })
+
+    this.app.post('/r/:token/workshop/panel/:type', requireWorkshop, (req: Request, res: Response) => {
+      const type = req.params.type
+      const action = (req.body && req.body.action) || 'toggle'
+      const validTypes = ['pinboard', 'info', 'files', 'schedules', 'git', 'usage', 'rac']
+      if (!validTypes.includes(type)) { res.status(400).json({ error: 'Invalid panel type' }); return }
+      const validActions = ['open', 'close', 'toggle']
+      if (!validActions.includes(action)) { res.status(400).json({ error: 'Invalid action' }); return }
+      this.deps.onWorkshopPanelToggle({ type, action: action as 'open' | 'close' | 'toggle' })
       res.json({ ok: true })
     })
   }

@@ -63,6 +63,7 @@
       <span id="workshop-back" class="workshop-back">&larr; Back</span>
       <span class="workshop-title">Workshop</span>
       <button id="workshop-spawn-btn" class="workshop-spawn-fab" title="Spawn Agent">＋ Spawn</button>
+      <button id="workshop-panels-btn" class="workshop-spawn-fab" style="background:#1a1a2e;border-color:#2a2a4a;color:#7ec4f5;" title="Panels">☰ Panels</button>
       <span id="workshop-hint" class="workshop-hint">pinch to zoom</span>
     </div>
     <div id="workshop-canvas-viewport">
@@ -141,6 +142,23 @@
         <span>Auto-approve permissions (skip prompts)</span>
       </label>
       <div id="spawn-error" class="spawn-error"></div>
+    </div>
+  </div>
+
+  <div id="workshop-panels" class="hidden">
+    <div class="detail-header" style="background:#1e1e1e;border-bottom:1px solid #333;">
+      <span id="panels-cancel" class="detail-back-btn">&larr;</span>
+      <span class="detail-name" style="color:#ccc;">Desktop Panels</span>
+    </div>
+    <div class="panels-body">
+      <div class="panels-hint">Tap to toggle open/close on desktop.</div>
+      <button class="panel-item" data-panel="pinboard"><span class="panel-icon">📌</span><span class="panel-label">Pinboard</span></button>
+      <button class="panel-item" data-panel="info"><span class="panel-icon">ℹ️</span><span class="panel-label">Info Channel</span></button>
+      <button class="panel-item" data-panel="files"><span class="panel-icon">📁</span><span class="panel-label">File Explorer</span></button>
+      <button class="panel-item" data-panel="schedules"><span class="panel-icon">📅</span><span class="panel-label">Schedules</span></button>
+      <button class="panel-item" data-panel="git"><span class="panel-icon">🌿</span><span class="panel-label">Git</span></button>
+      <button class="panel-item" data-panel="usage"><span class="panel-icon">📊</span><span class="panel-label">Usage</span></button>
+      <button class="panel-item" data-panel="rac"><span class="panel-icon">🎮</span><span class="panel-label">R.A.C.</span></button>
     </div>
   </div>
 

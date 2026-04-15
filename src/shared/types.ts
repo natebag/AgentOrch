@@ -182,6 +182,8 @@ export const IPC = {
   WORKSPACE_STATE_PUSH: 'workspace:state-push',
   // Workshop: mobile drag/resize → renderer window updates
   WORKSHOP_WINDOW_UPDATE: 'workshop:window-update',
+  // Workshop: mobile panel toggle → renderer panel open/close
+  WORKSHOP_PANEL_TOGGLE: 'workshop:panel-toggle',
 } as const
 
 export interface Skill {

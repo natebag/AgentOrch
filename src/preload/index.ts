@@ -162,6 +162,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.WORKSHOP_WINDOW_UPDATE, handler)
     return () => ipcRenderer.removeListener(IPC.WORKSHOP_WINDOW_UPDATE, handler)
   },
+  onWorkshopPanelToggle: (callback: (update: { type: string; action: 'open' | 'close' | 'toggle' }) => void) => {
+    const handler = (_e: unknown, update: any) => callback(update)
+    ipcRenderer.on(IPC.WORKSHOP_PANEL_TOGGLE, handler)
+    return () => ipcRenderer.removeListener(IPC.WORKSHOP_PANEL_TOGGLE, handler)
+  },
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),

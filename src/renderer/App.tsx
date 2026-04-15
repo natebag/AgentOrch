@@ -296,6 +296,44 @@ export function App(): React.ReactElement {
     return cleanup
   }, [updateWindowPosition, updateWindowSize])
 
+  // Mobile workshop panel toggle → open/close panels here
+  useEffect(() => {
+    const cleanup = window.electronAPI.onWorkshopPanelToggle(({ type, action }) => {
+      const baseById: Record<string, string> = {
+        pinboard: PINBOARD_ID,
+        info: INFO_ID,
+        files: FILES_ID,
+        rac: RAC_ID,
+        usage: USAGE_ID,
+        git: GIT_ID,
+        schedules: SCHEDULES_ID,
+      }
+      const base = baseById[type]
+      if (!base) return
+      const id = panelIdForTab(base, activeTabId)
+      const isOpen = windows.some(w => w.id === id)
+      const titleByType: Record<string, string> = {
+        pinboard: 'Pinboard',
+        info: 'Info Channel',
+        files: 'Files',
+        rac: 'R.A.C.',
+        usage: 'Usage',
+        git: 'Git',
+        schedules: 'Schedules',
+      }
+      if (action === 'open' || (action === 'toggle' && !isOpen)) {
+        if (isOpen) {
+          focusWindow(id)
+        } else {
+          addWindow(id, titleByType[type], undefined, activeTabId)
+        }
+      } else if (action === 'close' || (action === 'toggle' && isOpen)) {
+        if (isOpen) removeWindow(id)
+      }
+    })
+    return cleanup
+  }, [windows, activeTabId, addWindow, removeWindow, focusWindow])
+
   const handleProjectOpened = useCallback((p: RecentProject) => {
     setProject(p)
     setShowProjectPicker(false)

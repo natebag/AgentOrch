@@ -1070,6 +1070,40 @@
     }
   })
 
+  // Workshop panels menu
+  $('workshop-panels-btn').addEventListener('click', () => {
+    $('workshop-view').classList.add('hidden')
+    $('workshop-panels').classList.remove('hidden')
+  })
+
+  $('panels-cancel').addEventListener('click', () => {
+    $('workshop-panels').classList.add('hidden')
+    $('workshop-view').classList.remove('hidden')
+  })
+
+  document.querySelectorAll('.panel-item').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const panel = btn.dataset.panel
+      try {
+        const res = await fetch(`${BASE}/workshop/panel/${encodeURIComponent(panel)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle' })
+        })
+        if (res.ok) {
+          statusMessage(`Toggled ${panel}`, 'success')
+          $('workshop-panels').classList.add('hidden')
+          $('workshop-view').classList.remove('hidden')
+          fetchWorkshopState()
+        } else {
+          statusMessage('Panel toggle failed', 'error')
+        }
+      } catch {
+        statusMessage('Network error', 'error')
+      }
+    })
+  })
+
   // Initial start
   startPolling()
 })()

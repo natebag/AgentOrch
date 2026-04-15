@@ -64,6 +64,8 @@ declare global {
       pushWorkspaceState: (state: unknown) => void
       // Workshop window updates from mobile
       onWorkshopWindowUpdate: (callback: (update: { id: string; x?: number; y?: number; width?: number; height?: number }) => void) => () => void
+      // Workshop panel toggle from mobile
+      onWorkshopPanelToggle: (callback: (update: { type: string; action: 'open' | 'close' | 'toggle' }) => void) => () => void
       // Per-agent theme
       setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
     }
