@@ -16,6 +16,14 @@ const SHA_PATTERN = /^[0-9a-f]{4,64}$/i
 const TRUSTED_REMOTE_URL = 'https://github.com/the-cog-dev/cog.git'
 const TRUSTED_REMOTE_BRANCH = 'main'
 
+// Legacy URLs that GitHub auto-redirects to TRUSTED_REMOTE_URL. Pre-rebrand
+// clones still have these as their origin. We accept them at update time AND
+// auto-rotate the origin to the canonical URL so subsequent updates are normal.
+const LEGACY_REMOTE_URLS = [
+  'https://github.com/natebag/AgentOrch.git',
+  'https://github.com/natebag/agentorch.git'
+]
+
 export interface UpdateInfo {
   available: boolean
   currentSha: string
@@ -122,14 +130,27 @@ export class UpdateChecker {
     try {
       const beforeSha = gitExec(['rev-parse', 'HEAD'], 5000)
 
-      // Pin the update source. If origin has been redirected to an attacker URL
-      // (malicious dep rewriting .git/config, compromised prior update, etc.),
-      // fail closed instead of pulling.
+      // Pin the update source. If origin has been redirected to an attacker URL,
+      // fail closed instead of pulling. Accept the canonical URL OR a known
+      // legacy URL (pre-rebrand clones — GitHub auto-redirects these to the
+      // current repo). When we see a legacy URL, auto-migrate it.
       let originUrl = ''
       try { originUrl = gitExec(['remote', 'get-url', 'origin'], 5000) } catch { /* unset */ }
       const normalize = (u: string) => u.replace(/\.git\/?$/, '').replace(/\/+$/, '').toLowerCase()
-      if (normalize(originUrl) !== normalize(TRUSTED_REMOTE_URL)) {
+      const normalizedOrigin = normalize(originUrl)
+      const trustedSet = [TRUSTED_REMOTE_URL, ...LEGACY_REMOTE_URLS].map(normalize)
+      if (!trustedSet.includes(normalizedOrigin)) {
         return { success: false, error: `origin is ${originUrl || 'unset'}, expected ${TRUSTED_REMOTE_URL}` }
+      }
+      // Auto-migrate legacy origin to the canonical URL so future updates are normal
+      if (normalizedOrigin !== normalize(TRUSTED_REMOTE_URL)) {
+        try {
+          gitExec(['remote', 'set-url', 'origin', TRUSTED_REMOTE_URL], 5000)
+          console.log(`[UpdateChecker] Migrated origin from ${originUrl} to ${TRUSTED_REMOTE_URL}`)
+        } catch (err) {
+          console.warn(`[UpdateChecker] Could not auto-migrate origin: ${(err as Error).message}`)
+          // Continue anyway — fetch by absolute URL below doesn't depend on origin
+        }
       }
 
       // Reset local mutations (linter output, built artifacts) so git fetch is clean.
