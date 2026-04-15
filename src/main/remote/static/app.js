@@ -1012,17 +1012,104 @@
     } catch { statusMessage('Network error', 'error') }
   })
 
+  // CLI → valid models mapping (mirrors src/renderer/components/SpawnDialog.tsx).
+  // Values MUST match exactly what each CLI expects — typos silently fail.
+  const SPAWN_CLI_MODELS = {
+    claude: [
+      { label: 'Sonnet', value: 'sonnet' },
+      { label: 'Opus', value: 'opus' },
+      { label: 'Haiku', value: 'haiku' },
+      { label: 'Opus [1M context]', value: 'opus[1m]' },
+      { label: 'Sonnet [1M context]', value: 'sonnet[1m]' },
+      { label: 'Default (no --model flag)', value: '' }
+    ],
+    codex: [
+      { label: 'o4-mini (default)', value: '' },
+      { label: 'GPT-5.4', value: 'gpt-5.4' },
+      { label: 'GPT-5', value: 'gpt-5' },
+      { label: 'o3', value: 'o3' },
+      { label: 'o3-pro', value: 'o3-pro' },
+      { label: 'GPT-4.1', value: 'gpt-4.1' },
+      { label: 'GPT-4.1 mini', value: 'gpt-4.1-mini' }
+    ],
+    kimi: [
+      { label: 'Default', value: '' },
+      { label: 'Kimi K2.5', value: 'kimi-k2.5' },
+      { label: 'Kimi K2 Thinking Turbo', value: 'kimi-k2-thinking-turbo' },
+      { label: 'Moonshot v1 8K', value: 'moonshot-v1-8k' }
+    ],
+    gemini: [
+      { label: 'Default', value: '' },
+      { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+      { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+      { label: 'Gemini 2.0 Flash Thinking', value: 'gemini-2.0-flash-thinking' }
+    ],
+    openclaude: [
+      { label: 'GPT-5.4', value: 'gpt-5.4' },
+      { label: 'GPT-5', value: 'gpt-5' },
+      { label: 'GPT-4o', value: 'gpt-4o' },
+      { label: 'GPT-4.1', value: 'gpt-4.1' },
+      { label: 'GPT-4.1 mini', value: 'gpt-4.1-mini' },
+      { label: 'o3', value: 'o3' },
+      { label: 'o3-pro', value: 'o3-pro' },
+      { label: 'o4-mini', value: 'o4-mini' },
+      { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+      { label: 'DeepSeek V3', value: 'deepseek-chat' },
+      { label: 'DeepSeek R1', value: 'deepseek-reasoner' },
+      { label: 'Llama 4 Scout (Ollama)', value: 'llama4-scout' },
+      { label: 'Llama 4 Maverick (Ollama)', value: 'llama4-maverick' },
+      { label: 'Llama 3.3 70B (Ollama)', value: 'llama3.3' },
+      { label: 'Llama 3.1 8B (Ollama)', value: 'llama3.1:8b' },
+      { label: 'Mistral Large', value: 'mistral-large-latest' },
+      { label: 'Codestral', value: 'codestral-latest' },
+      { label: 'Qwen 3 (Ollama)', value: 'qwen3' },
+      { label: 'Qwen 2.5 Coder (Ollama)', value: 'qwen2.5-coder' }
+    ],
+    copilot: [
+      { label: 'Default (Copilot model)', value: '' },
+      { label: 'GPT-5.4', value: 'gpt-5.4' },
+      { label: 'GPT-5', value: 'gpt-5' },
+      { label: 'GPT-4o', value: 'gpt-4o' },
+      { label: 'o3', value: 'o3' },
+      { label: 'o4-mini', value: 'o4-mini' }
+    ],
+    grok: [
+      { label: 'Default', value: '' },
+      { label: 'Grok 3', value: 'grok-3' },
+      { label: 'Grok 3 Mini', value: 'grok-3-mini' },
+      { label: 'Grok 2', value: 'grok-2' }
+    ],
+    terminal: [
+      { label: 'N/A (plain shell)', value: '' }
+    ]
+  }
+
+  function updateSpawnModelOptions() {
+    const cli = $('spawn-cli').value
+    const models = SPAWN_CLI_MODELS[cli] || [{ label: 'Default', value: '' }]
+    const select = $('spawn-model')
+    select.innerHTML = models.map(m =>
+      `<option value="${escapeHtml(m.value)}">${escapeHtml(m.label)}</option>`
+    ).join('')
+    // If CLI is terminal, disable the model select (no model concept)
+    select.disabled = cli === 'terminal'
+  }
+
+  $('spawn-cli').addEventListener('change', updateSpawnModelOptions)
+
   // Workshop spawn agent dialog
   $('workshop-spawn-btn').addEventListener('click', () => {
     $('workshop-view').classList.add('hidden')
     $('workshop-spawn').classList.remove('hidden')
     $('spawn-name').value = ''
-    $('spawn-model').value = ''
     $('spawn-ceo-notes').value = ''
     $('spawn-error').textContent = ''
     $('spawn-auto').checked = true
     $('spawn-role').value = 'worker'
     $('spawn-cli').value = 'claude'
+    updateSpawnModelOptions()
     setTimeout(() => $('spawn-name').focus(), 100)
   })
 
@@ -1034,7 +1121,7 @@
   $('spawn-submit').addEventListener('click', async () => {
     const name = $('spawn-name').value.trim()
     const cli = $('spawn-cli').value
-    const model = $('spawn-model').value.trim()
+    const model = $('spawn-model').value
     const role = $('spawn-role').value
     const ceoNotes = $('spawn-ceo-notes').value.trim()
     const autoMode = $('spawn-auto').checked
