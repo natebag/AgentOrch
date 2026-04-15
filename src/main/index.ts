@@ -22,6 +22,7 @@ import * as https from 'https'
 import * as httpProto from 'http'
 import { createHash } from 'crypto'
 import { spawn as spawnChildProcess } from 'child_process'
+import { v4 as uuidv4 } from 'uuid'
 import { TokenManager } from './remote/token-manager'
 import { CloudflaredManager } from './remote/cloudflared-manager'
 import { RemoteServer } from './remote/remote-server'
@@ -270,6 +271,31 @@ async function enableRemoteView(): Promise<void> {
       hasReceivedInitialPrompt.delete(agentId)
       agents.delete(agentId)
       mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    },
+    spawnAgentFromWorkshop: async (config) => {
+      try {
+        const projectCwd = projectManager.currentProject?.path
+        if (!projectCwd) return { success: false, error: 'No project open' }
+
+        const fullConfig: AgentConfig = {
+          id: uuidv4(),
+          name: config.name,
+          cli: config.cli,
+          cwd: config.cwd || projectCwd,
+          role: config.role,
+          ceoNotes: config.ceoNotes,
+          shell: config.shell || 'powershell',
+          admin: false,
+          autoMode: config.autoMode,
+          ...(config.model ? { model: config.model } : {}),
+          ...(config.skills && config.skills.length > 0 ? { skills: config.skills } : {})
+        }
+
+        handleSpawnAgent(fullConfig)
+        return { success: true, agentId: fullConfig.id }
+      } catch (err) {
+        return { success: false, error: (err as Error).message }
+      }
     },
   })
 
@@ -640,6 +666,150 @@ function reconnectAgent(config: AgentConfig): void {
   }
 
   console.log(`Agent "${config.name}" reconnected successfully`)
+}
+
+// Shared spawn logic used by the IPC handler (desktop) and the Remote View
+// workshop spawn endpoint (mobile). Preserves all side effects: MCP config,
+// hub registration, skill prompt composition, PTY lifecycle wiring, CLI
+// launch command sequencing, and workspace window updates.
+function handleSpawnAgent(config: AgentConfig): { id: string; mcpConfigPath: string } {
+  // Apply persisted theme for this agent (if any) — preserves explicit override from preset
+  const projectPath = projectManager.currentProject?.path
+  if (!config.theme && projectPath) {
+    const savedTheme = themesStore.getTheme(projectPath, config.name)
+    if (savedTheme) config.theme = savedTheme
+  }
+
+  const mcpServerPath = getMcpServerPath()
+  const mcpConfigPath = writeAgentMcpConfig({
+    agentId: config.id,
+    agentName: config.name,
+    hubPort: hub.port,
+    hubSecret: hub.secret,
+    mcpServerPath
+  })
+
+  // Env vars for the MCP server — set on the PTY so child processes inherit them.
+  // Codex spawns MCP servers as subprocesses, so they'll pick these up.
+  // Dual-emit COG_* + AGENTORCH_* for in-flight agent compatibility across rebrand.
+  const mcpEnv: Record<string, string> = {
+    COG_HUB_PORT: String(hub.port),
+    COG_HUB_SECRET: hub.secret,
+    COG_AGENT_ID: config.id,
+    COG_AGENT_NAME: config.name,
+    AGENTORCH_HUB_PORT: String(hub.port),
+    AGENTORCH_HUB_SECRET: hub.secret,
+    AGENTORCH_AGENT_ID: config.id,
+    AGENTORCH_AGENT_NAME: config.name
+  }
+  if (config.cli === 'grok' && config.model) {
+    mcpEnv.GROK_MODEL = config.model
+  }
+  if (config.cli === 'openclaude') {
+    if (config.model) mcpEnv.OPENAI_MODEL = config.model
+    if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
+  }
+  if (config.tabId) {
+    mcpEnv.COG_TAB_ID = config.tabId
+    mcpEnv.AGENTORCH_TAB_ID = config.tabId
+  }
+
+  hub.registry.register(config)
+  hub.agentMetrics.register(config.name)
+
+  // Compose skill prompts into ceoNotes
+  if (config.skills && config.skills.length > 0) {
+    const skillPrompt = skillManager.resolveSkillPrompts(config.skills)
+    if (skillPrompt) {
+      const registered = hub.registry.get(config.name)
+      if (registered) {
+        registered.ceoNotes = [skillPrompt, registered.ceoNotes].filter(Boolean).join('\n\n')
+      }
+    }
+  }
+
+  const initialPrompt = buildInitialPrompt(config)
+  initialPrompts.set(config.id, initialPrompt)
+  // Block prompt injection until CLI commands are sent
+  hasReceivedInitialPrompt.add(config.id)
+
+  const managed = spawnAgentPty({
+    config,
+    mcpConfigPath,
+    extraEnv: mcpEnv,
+    onData: (data) => {
+      mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
+    },
+    onExit: (exitCode) => {
+      hub.registry.updateStatus(config.name, 'disconnected')
+      mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+      if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
+
+      // Auto-reconnect: if this wasn't a manual kill, respawn after a delay
+      if (!manualKills.has(config.id) && config.cli !== 'terminal') {
+        console.log(`Agent "${config.name}" exited unexpectedly (code ${exitCode}), reconnecting in ${RECONNECT_DELAY}ms...`)
+        setTimeout(() => {
+          if (manualKills.has(config.id)) {
+            manualKills.delete(config.id)
+            return
+          }
+          reconnectAgent(config)
+        }, RECONNECT_DELAY)
+      } else {
+        manualKills.delete(config.id)
+      }
+    },
+    onStatusChange: (status) => {
+      hub.registry.updateStatus(config.name, status)
+      mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+
+      // Status-driven prompt injection: inject when CLI first reaches prompt
+      if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
+        hasReceivedInitialPrompt.add(config.id)
+        const prompt = initialPrompts.get(config.id)
+        if (prompt) injectPrompt(managed, prompt, 0)
+      }
+
+      // Flush queued nudges when agent becomes active
+      if (status === 'active') flushPendingNudges(config.name)
+    },
+    onClearDetected: () => {
+      // Allow re-injection on next 'active' status
+      hasReceivedInitialPrompt.delete(config.id)
+    }
+  })
+
+  agents.set(config.id, managed)
+  mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+
+  // Launch agent CLI after shell initializes (plain terminals skip this)
+  // Some CLIs need multiple commands (e.g., codex needs `mcp add` first)
+  const cmds = buildCliLaunchCommands(config, mcpConfigPath, mcpServerPath, hub.port, hub.secret)
+  if (cmds) {
+    let delay = 1000
+    for (const cmd of cmds) {
+      setTimeout(() => {
+        writeToPty(managed, cmd + '\r')
+      }, delay)
+      delay += 3000 // Give each command time to complete
+    }
+
+    // Enable status-driven injection after CLI commands are sent
+    setTimeout(() => hasReceivedInitialPrompt.delete(config.id), delay)
+
+    // Fallback: if StatusDetector doesn't detect prompt, inject after timeout
+    setTimeout(() => {
+      if (!hasReceivedInitialPrompt.has(config.id)) {
+        hasReceivedInitialPrompt.add(config.id)
+        injectPrompt(managed, initialPrompt, 0)
+      }
+    }, delay + PROMPT_INJECT_FALLBACK_MS)
+  }
+
+  // For non-MCP agents: poll and inject messages into stdin
+
+  return { id: config.id, mcpConfigPath }
 }
 
 // Deliver a nudge to an agent's PTY.
@@ -1084,143 +1254,7 @@ function setupIPC(): void {
   })
 
   ipcMain.handle(IPC.SPAWN_AGENT, (_event, config: AgentConfig) => {
-    // Apply persisted theme for this agent (if any) — preserves explicit override from preset
-    const projectPath = projectManager.currentProject?.path
-    if (!config.theme && projectPath) {
-      const savedTheme = themesStore.getTheme(projectPath, config.name)
-      if (savedTheme) config.theme = savedTheme
-    }
-
-    const mcpServerPath = getMcpServerPath()
-    const mcpConfigPath = writeAgentMcpConfig({
-      agentId: config.id,
-      agentName: config.name,
-      hubPort: hub.port,
-      hubSecret: hub.secret,
-      mcpServerPath
-    })
-
-    // Env vars for the MCP server — set on the PTY so child processes inherit them.
-    // Codex spawns MCP servers as subprocesses, so they'll pick these up.
-    // Dual-emit COG_* + AGENTORCH_* for in-flight agent compatibility across rebrand.
-    const mcpEnv: Record<string, string> = {
-      COG_HUB_PORT: String(hub.port),
-      COG_HUB_SECRET: hub.secret,
-      COG_AGENT_ID: config.id,
-      COG_AGENT_NAME: config.name,
-      AGENTORCH_HUB_PORT: String(hub.port),
-      AGENTORCH_HUB_SECRET: hub.secret,
-      AGENTORCH_AGENT_ID: config.id,
-      AGENTORCH_AGENT_NAME: config.name
-    }
-    if (config.cli === 'grok' && config.model) {
-      mcpEnv.GROK_MODEL = config.model
-    }
-    if (config.cli === 'openclaude') {
-      if (config.model) mcpEnv.OPENAI_MODEL = config.model
-      if (config.providerUrl) mcpEnv.OPENAI_BASE_URL = config.providerUrl
-    }
-    if (config.tabId) {
-      mcpEnv.COG_TAB_ID = config.tabId
-      mcpEnv.AGENTORCH_TAB_ID = config.tabId
-    }
-
-    hub.registry.register(config)
-    hub.agentMetrics.register(config.name)
-
-    // Compose skill prompts into ceoNotes
-    if (config.skills && config.skills.length > 0) {
-      const skillPrompt = skillManager.resolveSkillPrompts(config.skills)
-      if (skillPrompt) {
-        const registered = hub.registry.get(config.name)
-        if (registered) {
-          registered.ceoNotes = [skillPrompt, registered.ceoNotes].filter(Boolean).join('\n\n')
-        }
-      }
-    }
-
-    const initialPrompt = buildInitialPrompt(config)
-    initialPrompts.set(config.id, initialPrompt)
-    // Block prompt injection until CLI commands are sent
-    hasReceivedInitialPrompt.add(config.id)
-
-    const managed = spawnAgentPty({
-      config,
-      mcpConfigPath,
-      extraEnv: mcpEnv,
-      onData: (data) => {
-        mainWindow.webContents.send(IPC.PTY_OUTPUT, config.id, data)
-      },
-      onExit: (exitCode) => {
-        hub.registry.updateStatus(config.name, 'disconnected')
-        mainWindow.webContents.send(IPC.PTY_EXIT, config.id, exitCode)
-        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
-        if (managed.mcpConfigPath) cleanupConfig(managed.mcpConfigPath)
-
-        // Auto-reconnect: if this wasn't a manual kill, respawn after a delay
-        if (!manualKills.has(config.id) && config.cli !== 'terminal') {
-          console.log(`Agent "${config.name}" exited unexpectedly (code ${exitCode}), reconnecting in ${RECONNECT_DELAY}ms...`)
-          setTimeout(() => {
-            if (manualKills.has(config.id)) {
-              manualKills.delete(config.id)
-              return
-            }
-            reconnectAgent(config)
-          }, RECONNECT_DELAY)
-        } else {
-          manualKills.delete(config.id)
-        }
-      },
-      onStatusChange: (status) => {
-        hub.registry.updateStatus(config.name, status)
-        mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
-
-        // Status-driven prompt injection: inject when CLI first reaches prompt
-        if (status === 'active' && !hasReceivedInitialPrompt.has(config.id)) {
-          hasReceivedInitialPrompt.add(config.id)
-          const prompt = initialPrompts.get(config.id)
-          if (prompt) injectPrompt(managed, prompt, 0)
-        }
-
-        // Flush queued nudges when agent becomes active
-        if (status === 'active') flushPendingNudges(config.name)
-      },
-      onClearDetected: () => {
-        // Allow re-injection on next 'active' status
-        hasReceivedInitialPrompt.delete(config.id)
-      }
-    })
-
-    agents.set(config.id, managed)
-    mainWindow.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
-
-    // Launch agent CLI after shell initializes (plain terminals skip this)
-    // Some CLIs need multiple commands (e.g., codex needs `mcp add` first)
-    const cmds = buildCliLaunchCommands(config, mcpConfigPath, mcpServerPath, hub.port, hub.secret)
-    if (cmds) {
-      let delay = 1000
-      for (const cmd of cmds) {
-        setTimeout(() => {
-          writeToPty(managed, cmd + '\r')
-        }, delay)
-        delay += 3000 // Give each command time to complete
-      }
-
-      // Enable status-driven injection after CLI commands are sent
-      setTimeout(() => hasReceivedInitialPrompt.delete(config.id), delay)
-
-      // Fallback: if StatusDetector doesn't detect prompt, inject after timeout
-      setTimeout(() => {
-        if (!hasReceivedInitialPrompt.has(config.id)) {
-          hasReceivedInitialPrompt.add(config.id)
-          injectPrompt(managed, initialPrompt, 0)
-        }
-      }, delay + PROMPT_INJECT_FALLBACK_MS)
-    }
-
-    // For non-MCP agents: poll and inject messages into stdin
-
-    return { id: config.id, mcpConfigPath }
+    return handleSpawnAgent(config)
   })
 
   ipcMain.handle(IPC.WRITE_TO_PTY, (_event, agentId: string, data: string) => {

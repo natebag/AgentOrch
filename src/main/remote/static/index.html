@@ -62,6 +62,7 @@
     <div id="workshop-header" class="workshop-header">
       <span id="workshop-back" class="workshop-back">&larr; Back</span>
       <span class="workshop-title">Workshop</span>
+      <button id="workshop-spawn-btn" class="workshop-spawn-fab" title="Spawn Agent">＋ Spawn</button>
       <span id="workshop-hint" class="workshop-hint">pinch to zoom</span>
     </div>
     <div id="workshop-canvas-viewport">
@@ -91,6 +92,55 @@
     <div class="detail-send-bar">
       <input id="detail-send-text" type="text" placeholder="Type a message..." />
       <button id="detail-send-btn">&uarr;</button>
+    </div>
+  </div>
+
+  <div id="workshop-spawn" class="hidden">
+    <div class="detail-header" style="background:#1e1e1e;border-bottom:1px solid #333;">
+      <span id="spawn-cancel" class="detail-back-btn">&larr;</span>
+      <span class="detail-name" style="color:#ccc;">Spawn Agent</span>
+      <button id="spawn-submit" style="background:#1a2e1a;border:1px solid #2a4a2a;color:#6ee7b7;font-size:11px;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:monospace;">Spawn</button>
+    </div>
+    <div class="spawn-body">
+      <label class="spawn-field">
+        <span class="spawn-label">Name</span>
+        <input id="spawn-name" type="text" placeholder="e.g., worker-1" autocomplete="off" />
+      </label>
+      <label class="spawn-field">
+        <span class="spawn-label">CLI</span>
+        <select id="spawn-cli">
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex CLI</option>
+          <option value="kimi">Kimi CLI</option>
+          <option value="gemini">Gemini CLI</option>
+          <option value="openclaude">OpenClaude</option>
+          <option value="copilot">Copilot CLI</option>
+          <option value="grok">Grok CLI</option>
+          <option value="terminal">Plain Terminal</option>
+        </select>
+      </label>
+      <label class="spawn-field">
+        <span class="spawn-label">Model (optional)</span>
+        <input id="spawn-model" type="text" placeholder="sonnet, opus, gpt-5..." autocomplete="off" />
+      </label>
+      <label class="spawn-field">
+        <span class="spawn-label">Role</span>
+        <select id="spawn-role">
+          <option value="orchestrator">Orchestrator</option>
+          <option value="worker" selected>Worker</option>
+          <option value="researcher">Researcher</option>
+          <option value="reviewer">Reviewer</option>
+        </select>
+      </label>
+      <label class="spawn-field">
+        <span class="spawn-label">CEO Notes (agent instructions)</span>
+        <textarea id="spawn-ceo-notes" rows="5" placeholder="How should this agent behave? What workflow does it follow?"></textarea>
+      </label>
+      <label class="spawn-checkbox">
+        <input id="spawn-auto" type="checkbox" checked />
+        <span>Auto-approve permissions (skip prompts)</span>
+      </label>
+      <div id="spawn-error" class="spawn-error"></div>
     </div>
   </div>
 

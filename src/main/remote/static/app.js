@@ -883,6 +883,64 @@
     } catch { statusMessage('Network error', 'error') }
   })
 
+  // Workshop spawn agent dialog
+  $('workshop-spawn-btn').addEventListener('click', () => {
+    $('workshop-view').classList.add('hidden')
+    $('workshop-spawn').classList.remove('hidden')
+    $('spawn-name').value = ''
+    $('spawn-model').value = ''
+    $('spawn-ceo-notes').value = ''
+    $('spawn-error').textContent = ''
+    $('spawn-auto').checked = true
+    $('spawn-role').value = 'worker'
+    $('spawn-cli').value = 'claude'
+    setTimeout(() => $('spawn-name').focus(), 100)
+  })
+
+  $('spawn-cancel').addEventListener('click', () => {
+    $('workshop-spawn').classList.add('hidden')
+    $('workshop-view').classList.remove('hidden')
+  })
+
+  $('spawn-submit').addEventListener('click', async () => {
+    const name = $('spawn-name').value.trim()
+    const cli = $('spawn-cli').value
+    const model = $('spawn-model').value.trim()
+    const role = $('spawn-role').value
+    const ceoNotes = $('spawn-ceo-notes').value.trim()
+    const autoMode = $('spawn-auto').checked
+
+    if (!name) { $('spawn-error').textContent = 'Name is required'; return }
+    if (!cli) { $('spawn-error').textContent = 'CLI is required'; return }
+
+    $('spawn-error').textContent = ''
+    const btn = $('spawn-submit')
+    btn.disabled = true
+    btn.textContent = '...'
+
+    try {
+      const res = await fetch(`${BASE}/workshop/spawn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, cli, model: model || undefined, role, ceoNotes, autoMode })
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        statusMessage(`Spawned ${name}`, 'success')
+        $('workshop-spawn').classList.add('hidden')
+        $('workshop-view').classList.remove('hidden')
+        fetchWorkshopState()
+      } else {
+        $('spawn-error').textContent = data.error || 'Spawn failed'
+      }
+    } catch {
+      $('spawn-error').textContent = 'Network error'
+    } finally {
+      btn.disabled = false
+      btn.textContent = 'Spawn'
+    }
+  })
+
   // Initial start
   startPolling()
 })()

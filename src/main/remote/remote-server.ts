@@ -56,6 +56,17 @@ export interface RemoteServerDeps {
   getWorkspaceState: () => any
   getWorkshopPasscodeHash: () => string | null
   killAgent: (agentId: string) => void
+  spawnAgentFromWorkshop: (config: {
+    name: string
+    cli: string
+    model?: string
+    role: string
+    ceoNotes: string
+    autoMode: boolean
+    skills?: string[]
+    shell?: 'cmd' | 'powershell' | 'bash' | 'zsh' | 'fish'
+    cwd?: string
+  }) => Promise<{ success: boolean; agentId?: string; error?: string }>
 }
 
 // Find the static directory at runtime. In electron-vite dev mode, __dirname
@@ -300,6 +311,30 @@ export class RemoteServer {
         res.json({ ok: true })
       } catch (err) {
         res.status(400).json({ error: (err as Error).message })
+      }
+    })
+
+    this.app.post('/r/:token/workshop/spawn', requireWorkshop, async (req: Request, res: Response) => {
+      const body = req.body ?? {}
+      if (typeof body.name !== 'string' || !body.name.trim()) { res.status(400).json({ error: 'name required' }); return }
+      if (typeof body.cli !== 'string' || !body.cli.trim()) { res.status(400).json({ error: 'cli required' }); return }
+      if (typeof body.role !== 'string' || !body.role.trim()) { res.status(400).json({ error: 'role required' }); return }
+      try {
+        const result = await this.deps.spawnAgentFromWorkshop({
+          name: String(body.name).trim(),
+          cli: String(body.cli).trim(),
+          model: body.model ? String(body.model).trim() : undefined,
+          role: String(body.role).trim(),
+          ceoNotes: String(body.ceoNotes || ''),
+          autoMode: body.autoMode === true,
+          skills: Array.isArray(body.skills) ? body.skills.map(String) : [],
+          shell: body.shell,
+          cwd: body.cwd
+        })
+        if (result.success) res.json({ ok: true, agentId: result.agentId })
+        else res.status(400).json({ error: result.error || 'Spawn failed' })
+      } catch (err) {
+        res.status(500).json({ error: (err as Error).message })
       }
     })
   }
