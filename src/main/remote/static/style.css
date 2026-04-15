@@ -429,7 +429,9 @@ body {
 #workshop-canvas-viewport {
   position: fixed; top: 42px; left: 0; right: 0; bottom: 0;
   overflow: hidden; touch-action: none; background: #0a0a0a;
+  cursor: grab;
 }
+#workshop-canvas-viewport:active { cursor: grabbing; }
 #workshop-canvas {
   position: absolute; top: 0; left: 0;
   width: 4000px; height: 4000px;

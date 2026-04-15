@@ -602,6 +602,55 @@
     }, { passive: false })
 
     vp.addEventListener('touchend', () => { isPinching = false })
+
+    // Mouse wheel zoom — anchored on cursor position so zooming feels natural
+    vp.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      const rect = vp.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      // Translate cursor position into canvas coordinate space BEFORE zoom change
+      const canvasX = (cx - workshopTouchState.panX) / workshopTouchState.zoom
+      const canvasY = (cy - workshopTouchState.panY) / workshopTouchState.zoom
+      const factor = e.deltaY > 0 ? 0.9 : 1.1
+      const newZoom = Math.max(0.15, Math.min(2.0, workshopTouchState.zoom * factor))
+      workshopTouchState.zoom = newZoom
+      // Keep the cursor anchored on the same canvas point after zoom
+      workshopTouchState.panX = cx - canvasX * newZoom
+      workshopTouchState.panY = cy - canvasY * newZoom
+      applyCanvasTransform()
+    }, { passive: false })
+
+    // Mouse drag pan — click anywhere on the canvas background (not on a card)
+    let isMouseDragging = false
+    let mouseStartX = 0, mouseStartY = 0, mouseStartPanX = 0, mouseStartPanY = 0
+
+    vp.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return  // primary button only
+      if (e.target.closest('.ws-card')) return  // let cards handle their own clicks
+      isMouseDragging = true
+      mouseStartX = e.clientX
+      mouseStartY = e.clientY
+      mouseStartPanX = workshopTouchState.panX
+      mouseStartPanY = workshopTouchState.panY
+      vp.style.cursor = 'grabbing'
+      e.preventDefault()
+    })
+
+    // mousemove + mouseup on window (not viewport) so drag continues off-viewport
+    const onMouseMove = (e) => {
+      if (!isMouseDragging) return
+      workshopTouchState.panX = mouseStartPanX + (e.clientX - mouseStartX)
+      workshopTouchState.panY = mouseStartPanY + (e.clientY - mouseStartY)
+      applyCanvasTransform()
+    }
+    const onMouseUp = () => {
+      if (!isMouseDragging) return
+      isMouseDragging = false
+      vp.style.cursor = ''
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
   }
 
   // Agent detail view
