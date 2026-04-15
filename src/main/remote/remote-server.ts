@@ -67,6 +67,13 @@ export interface RemoteServerDeps {
     shell?: 'cmd' | 'powershell' | 'bash' | 'zsh' | 'fish'
     cwd?: string
   }) => Promise<{ success: boolean; agentId?: string; error?: string }>
+  onWorkshopWindowUpdate: (update: {
+    id: string
+    x?: number
+    y?: number
+    width?: number
+    height?: number
+  }) => void
 }
 
 // Find the static directory at runtime. In electron-vite dev mode, __dirname
@@ -336,6 +343,20 @@ export class RemoteServer {
       } catch (err) {
         res.status(500).json({ error: (err as Error).message })
       }
+    })
+
+    this.app.post('/r/:token/workshop/window/:id', requireWorkshop, (req: Request, res: Response) => {
+      const id = req.params.id
+      const { x, y, width, height } = req.body ?? {}
+      if (typeof id !== 'string' || !id) { res.status(400).json({ error: 'id required' }); return }
+      // Validate numeric fields if present
+      const update: { id: string; x?: number; y?: number; width?: number; height?: number } = { id }
+      if (typeof x === 'number') update.x = x
+      if (typeof y === 'number') update.y = y
+      if (typeof width === 'number' && width > 0) update.width = width
+      if (typeof height === 'number' && height > 0) update.height = height
+      this.deps.onWorkshopWindowUpdate(update)
+      res.json({ ok: true })
     })
   }
 }

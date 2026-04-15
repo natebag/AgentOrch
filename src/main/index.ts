@@ -297,6 +297,9 @@ async function enableRemoteView(): Promise<void> {
         return { success: false, error: (err as Error).message }
       }
     },
+    onWorkshopWindowUpdate: (update) => {
+      mainWindow?.webContents.send(IPC.WORKSHOP_WINDOW_UPDATE, update)
+    },
   })
 
   const expressApp = remoteServer.getApp()

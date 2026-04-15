@@ -417,6 +417,15 @@
   let detailPollHandle = null
   let workshopTouchState = { zoom: 0.4, panX: 0, panY: 0 }
 
+  // Fire-and-forget window position/size push to server during drag/resize
+  function pushWindowUpdate(windowId, update) {
+    fetch(`${BASE}/workshop/window/${encodeURIComponent(windowId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(update)
+    }).catch(() => { /* retry on next action */ })
+  }
+
   // Passcode entry
   $('workshop-btn').addEventListener('click', () => {
     $('workshop-passcode').classList.remove('hidden')
@@ -536,19 +545,139 @@
             ${escapeHtml(a.cli)}${a.model ? ' · ' + escapeHtml(a.model) : ''}
           </div>
         `
-        card.addEventListener('click', () => openAgentDetail(a))
+        card.addEventListener('click', () => {
+          if (card.dataset.skipNextClick) { delete card.dataset.skipNextClick; return }
+          openAgentDetail(a)
+        })
       } else {
         card.innerHTML = `
           <div class="ws-card-chrome"><span class="ws-card-title">${escapeHtml(win.title)}</span></div>
           <div class="ws-card-body" style="color:#666">${escapeHtml(win.panelType || 'panel')}</div>
         `
-        card.addEventListener('click', () => openPanelDetail(win))
+        card.addEventListener('click', () => {
+          if (card.dataset.skipNextClick) { delete card.dataset.skipNextClick; return }
+          openPanelDetail(win)
+        })
       }
 
       canvas.appendChild(card)
+      attachCardDragAndResize(card, win)
     }
 
     applyCanvasTransform()
+  }
+
+  // Attach drag-to-move (on chrome) and resize (bottom-right corner) to a workshop card.
+  // Changes apply locally first for instant feedback; server push only fires on release,
+  // so the desktop round-trip confirms via the next workshop state poll.
+  function attachCardDragAndResize(card, win) {
+    const chrome = card.querySelector('.ws-card-chrome')
+    if (chrome) {
+      let dragState = null
+
+      const startDrag = (clientX, clientY) => {
+        dragState = {
+          startX: clientX, startY: clientY,
+          origX: win.x, origY: win.y,
+          latestX: win.x, latestY: win.y
+        }
+      }
+      const moveDrag = (clientX, clientY) => {
+        if (!dragState) return
+        const dx = (clientX - dragState.startX) / workshopTouchState.zoom
+        const dy = (clientY - dragState.startY) / workshopTouchState.zoom
+        dragState.latestX = dragState.origX + dx
+        dragState.latestY = dragState.origY + dy
+        card.style.left = dragState.latestX + 'px'
+        card.style.top = dragState.latestY + 'px'
+      }
+      const endDrag = () => {
+        if (!dragState) return
+        const moved = Math.abs(dragState.latestX - dragState.origX) > 3 ||
+                      Math.abs(dragState.latestY - dragState.origY) > 3
+        if (moved) {
+          pushWindowUpdate(win.id, { x: Math.round(dragState.latestX), y: Math.round(dragState.latestY) })
+          card.dataset.skipNextClick = '1'
+        }
+        dragState = null
+      }
+
+      chrome.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return
+        e.stopPropagation()
+        startDrag(e.touches[0].clientX, e.touches[0].clientY)
+      }, { passive: true })
+      chrome.addEventListener('touchmove', (e) => {
+        if (!dragState || e.touches.length !== 1) return
+        e.preventDefault()
+        moveDrag(e.touches[0].clientX, e.touches[0].clientY)
+      }, { passive: false })
+      chrome.addEventListener('touchend', endDrag)
+
+      chrome.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return
+        e.stopPropagation()
+        startDrag(e.clientX, e.clientY)
+        const onMove = (ev) => moveDrag(ev.clientX, ev.clientY)
+        const onUp = () => { endDrag(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+      })
+    }
+
+    const resizeHandle = document.createElement('div')
+    resizeHandle.className = 'ws-card-resize'
+    card.appendChild(resizeHandle)
+
+    let resizeState = null
+    const startResize = (clientX, clientY) => {
+      resizeState = {
+        startX: clientX, startY: clientY,
+        origW: win.width, origH: win.height,
+        latestW: win.width, latestH: win.height
+      }
+    }
+    const moveResize = (clientX, clientY) => {
+      if (!resizeState) return
+      const dw = (clientX - resizeState.startX) / workshopTouchState.zoom
+      const dh = (clientY - resizeState.startY) / workshopTouchState.zoom
+      resizeState.latestW = Math.max(200, resizeState.origW + dw)
+      resizeState.latestH = Math.max(120, resizeState.origH + dh)
+      card.style.width = resizeState.latestW + 'px'
+      card.style.height = resizeState.latestH + 'px'
+    }
+    const endResize = () => {
+      if (!resizeState) return
+      const changed = Math.abs(resizeState.latestW - resizeState.origW) > 3 ||
+                      Math.abs(resizeState.latestH - resizeState.origH) > 3
+      if (changed) {
+        pushWindowUpdate(win.id, { width: Math.round(resizeState.latestW), height: Math.round(resizeState.latestH) })
+        card.dataset.skipNextClick = '1'
+      }
+      resizeState = null
+    }
+
+    resizeHandle.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return
+      e.stopPropagation()
+      startResize(e.touches[0].clientX, e.touches[0].clientY)
+    }, { passive: true })
+    resizeHandle.addEventListener('touchmove', (e) => {
+      if (!resizeState || e.touches.length !== 1) return
+      e.preventDefault()
+      moveResize(e.touches[0].clientX, e.touches[0].clientY)
+    }, { passive: false })
+    resizeHandle.addEventListener('touchend', endResize)
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      e.stopPropagation()
+      startResize(e.clientX, e.clientY)
+      const onMove = (ev) => moveResize(ev.clientX, ev.clientY)
+      const onUp = () => { endResize(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    })
   }
 
   function applyCanvasTransform() {

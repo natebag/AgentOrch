@@ -447,7 +447,17 @@ body {
 .ws-card-chrome {
   background: #1e1e1e; padding: 5px 8px; font-size: 11px;
   display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+  cursor: move; touch-action: none;
 }
+.ws-card-resize {
+  position: absolute; right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  background: linear-gradient(135deg, transparent 45%, #555 45%, #555 55%, transparent 55%, transparent 70%, #555 70%, #555 80%, transparent 80%);
+  cursor: nwse-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.ws-card-resize:hover { background: linear-gradient(135deg, transparent 45%, #f5d76e 45%, #f5d76e 55%, transparent 55%, transparent 70%, #f5d76e 70%, #f5d76e 80%, transparent 80%); }
 .ws-card-title { color: #ccc; font-weight: 600; flex: 1; }
 .ws-card-role { font-size: 9px; opacity: 0.7; }
 .ws-card-body {

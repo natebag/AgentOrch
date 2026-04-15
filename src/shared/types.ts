@@ -180,6 +180,8 @@ export const IPC = {
   WORKSHOP_CLEAR_PASSCODE: 'workshop:clear-passcode',
   // Workspace state bridge (renderer → main, fire-and-forget)
   WORKSPACE_STATE_PUSH: 'workspace:state-push',
+  // Workshop: mobile drag/resize → renderer window updates
+  WORKSHOP_WINDOW_UPDATE: 'workshop:window-update',
 } as const
 
 export interface Skill {

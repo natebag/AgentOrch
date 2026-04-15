@@ -283,6 +283,19 @@ export function App(): React.ReactElement {
     }
   }, [agents, windows, addWindow, activeTabId])
 
+  // Mobile workshop drag/resize → apply window updates here
+  useEffect(() => {
+    const cleanup = window.electronAPI.onWorkshopWindowUpdate((update) => {
+      if (update.x !== undefined && update.y !== undefined) {
+        updateWindowPosition(update.id, update.x, update.y)
+      }
+      if (update.width !== undefined && update.height !== undefined) {
+        updateWindowSize(update.id, update.width, update.height)
+      }
+    })
+    return cleanup
+  }, [updateWindowPosition, updateWindowSize])
+
   const handleProjectOpened = useCallback((p: RecentProject) => {
     setProject(p)
     setShowProjectPicker(false)

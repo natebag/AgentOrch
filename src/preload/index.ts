@@ -156,6 +156,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearWorkshopPasscode: () => ipcRenderer.invoke(IPC.WORKSHOP_CLEAR_PASSCODE),
   // Workspace state bridge (fire-and-forget)
   pushWorkspaceState: (state: unknown) => ipcRenderer.send(IPC.WORKSPACE_STATE_PUSH, state),
+  // Workshop window updates from mobile
+  onWorkshopWindowUpdate: (callback: (update: { id: string; x?: number; y?: number; width?: number; height?: number }) => void) => {
+    const handler = (_e: unknown, update: any) => callback(update)
+    ipcRenderer.on(IPC.WORKSHOP_WINDOW_UPDATE, handler)
+    return () => ipcRenderer.removeListener(IPC.WORKSHOP_WINDOW_UPDATE, handler)
+  },
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),

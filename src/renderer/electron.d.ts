@@ -62,6 +62,8 @@ declare global {
       clearWorkshopPasscode: () => Promise<{ success: boolean }>
       // Workspace state bridge (fire-and-forget)
       pushWorkspaceState: (state: unknown) => void
+      // Workshop window updates from mobile
+      onWorkshopWindowUpdate: (callback: (update: { id: string; x?: number; y?: number; width?: number; height?: number }) => void) => () => void
       // Per-agent theme
       setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
     }
