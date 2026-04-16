@@ -84,11 +84,24 @@ export class CloudflaredManager {
     if (this.findInstalled()) return
     fs.mkdirSync(this.binDir, { recursive: true })
     const url = resolveDownloadUrl(process.platform, process.arch)
-    await this.opts.download(url, this.binPath, (pct) => {
-      this.opts.onProgress?.(pct)
-    })
-    if (process.platform !== 'win32') {
+
+    if (url.endsWith('.tgz')) {
+      // macOS: download is a tarball containing the binary
+      const tgzPath = this.binPath + '.tgz'
+      await this.opts.download(url, tgzPath, (pct) => {
+        this.opts.onProgress?.(pct)
+      })
+      const { execSync } = await import('child_process')
+      execSync(`tar -xzf "${tgzPath}" -C "${this.binDir}"`, { stdio: 'ignore' })
+      try { fs.unlinkSync(tgzPath) } catch { /* ok */ }
       fs.chmodSync(this.binPath, 0o755)
+    } else {
+      await this.opts.download(url, this.binPath, (pct) => {
+        this.opts.onProgress?.(pct)
+      })
+      if (process.platform !== 'win32') {
+        fs.chmodSync(this.binPath, 0o755)
+      }
     }
     this.installedPath = this.binPath
   }
