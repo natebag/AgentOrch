@@ -58,6 +58,7 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
   const [setupProgress, setSetupProgress] = useState<{ stage: string; message?: string } | null>(null)
   const [showQr, setShowQr] = useState(false)
   const [plainQr, setPlainQr] = useState(false)
+  const [shortQrUrl, setShortQrUrl] = useState<string | null>(null)
   const [showCustomTimeout, setShowCustomTimeout] = useState(false)
   const [customTimeoutHours, setCustomTimeoutHours] = useState(8)
   const [passcodeSet, setPasscodeSet] = useState(false)
@@ -71,19 +72,37 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
       // Plain mode: lower error correction + no logo overlay for ancient QR
       // readers (Nintendo 3DS, older feature phones). Default: ECL 'H' so the
       // centered cog logo doesn't break scannability on modern scanners.
+      const content = (plainQr && shortQrUrl) ? shortQrUrl : qrSourceUrl
       return new QRCode({
-        content: qrSourceUrl,
+        content,
         padding: 2,
         width: 220,
         height: 220,
         color: '#e0e0e0',
         background: '#1e1e1e',
-        ecl: plainQr ? 'M' : 'H'
+        ecl: plainQr ? 'L' : 'H'
       }).svg()
     } catch {
       return null
     }
-  }, [qrSourceUrl, plainQr])
+  }, [qrSourceUrl, plainQr, shortQrUrl])
+
+  useEffect(() => {
+    if (!plainQr || !remoteState.lanUrl) { setShortQrUrl(null); return }
+    let cancelled = false
+    fetch('http://3ds.thecog.dev/api/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lan: remoteState.lanUrl || null,
+        tunnel: remoteState.publicUrl || null
+      })
+    })
+      .then(r => r.json())
+      .then(data => { if (!cancelled && data.code) setShortQrUrl(`http://3ds.thecog.dev/${data.code}`) })
+      .catch(() => { if (!cancelled) setShortQrUrl(null) })
+    return () => { cancelled = true }
+  }, [plainQr, remoteState.lanUrl, remoteState.publicUrl])
 
   useEffect(() => {
     electronAPI.getSettings().then(s => {
