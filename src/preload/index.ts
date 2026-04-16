@@ -171,6 +171,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   syncWorkshopLayout: (layouts: Array<{ id: string; x: number; y: number; width: number; height: number; color: string }>) =>
     ipcRenderer.send(IPC.WORKSHOP_LAYOUT_SYNC, layouts),
+  registerShortLink: (lan: string | null, tunnel: string | null): Promise<string | null> =>
+    ipcRenderer.invoke('register-short-link', lan, tunnel),
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),

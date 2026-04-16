@@ -1700,6 +1700,22 @@ function setupIPC(): void {
     }
   })
 
+  // 3DS QR shortener — POST to 3ds.thecog.dev from the main process
+  // (renderer fetch gets blocked by CSP)
+  ipcMain.handle('register-short-link', async (_event, lan: string | null, tunnel: string | null) => {
+    try {
+      const resp = await fetch('http://3ds.thecog.dev/api/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lan, tunnel })
+      })
+      const data = await resp.json() as { code?: string }
+      return data.code ? `http://3ds.thecog.dev/${data.code}` : null
+    } catch {
+      return null
+    }
+  })
+
   // Usage IPC
   ipcMain.handle(IPC.USAGE_GET_METRICS, () => {
     if (!hub) return []

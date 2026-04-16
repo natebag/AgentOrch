@@ -88,19 +88,13 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
   }, [qrSourceUrl, plainQr, shortQrUrl])
 
   useEffect(() => {
-    if (!plainQr || !remoteState.lanUrl) { setShortQrUrl(null); return }
+    const hasAnyUrl = remoteState.lanUrl || remoteState.publicUrl
+    if (!plainQr || !hasAnyUrl) { setShortQrUrl(null); return }
     let cancelled = false
-    fetch('http://3ds.thecog.dev/api/link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lan: remoteState.lanUrl || null,
-        tunnel: remoteState.publicUrl || null
-      })
-    })
-      .then(r => r.json())
-      .then(data => { if (!cancelled && data.code) setShortQrUrl(`http://3ds.thecog.dev/${data.code}`) })
-      .catch(() => { if (!cancelled) setShortQrUrl(null) })
+    window.electronAPI.registerShortLink(
+      remoteState.lanUrl || null,
+      remoteState.publicUrl || null
+    ).then(url => { if (!cancelled) setShortQrUrl(url) })
     return () => { cancelled = true }
   }, [plainQr, remoteState.lanUrl, remoteState.publicUrl])
 

@@ -70,6 +70,7 @@ declare global {
       onWorkshopPanelToggle: (callback: (update: { type: string; action: 'open' | 'close' | 'toggle' }) => void) => () => void
       // Workshop layout mirror (renderer → main)
       syncWorkshopLayout: (layouts: Array<{ id: string; x: number; y: number; width: number; height: number; color: string }>) => void
+      registerShortLink: (lan: string | null, tunnel: string | null) => Promise<string | null>
       // Per-agent theme
       setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
     }
