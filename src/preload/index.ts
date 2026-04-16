@@ -169,6 +169,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC.WORKSHOP_PANEL_TOGGLE, handler)
     return () => ipcRenderer.removeListener(IPC.WORKSHOP_PANEL_TOGGLE, handler)
   },
+  syncWorkshopLayout: (layouts: Array<{ id: string; x: number; y: number; width: number; height: number; color: string }>) =>
+    ipcRenderer.send(IPC.WORKSHOP_LAYOUT_SYNC, layouts),
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),

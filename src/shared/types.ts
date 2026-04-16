@@ -186,6 +186,8 @@ export const IPC = {
   WORKSHOP_WINDOW_UPDATE: 'workshop:window-update',
   // Workshop: mobile panel toggle → renderer panel open/close
   WORKSHOP_PANEL_TOGGLE: 'workshop:panel-toggle',
+  // Workshop: renderer → main layout mirror for /state
+  WORKSHOP_LAYOUT_SYNC: 'workshop:layout-sync',
 } as const
 
 export interface Skill {

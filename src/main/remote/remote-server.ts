@@ -76,6 +76,7 @@ export interface RemoteServerDeps {
     height?: number
   }) => void
   onWorkshopPanelToggle: (update: { type: string; action: 'open' | 'close' | 'toggle' }) => void
+  getAgentLayouts: () => Record<string, { x: number; y: number; width: number; height: number; color: string }>
 }
 
 // Find the static directory at runtime. In electron-vite dev mode, __dirname
@@ -258,9 +259,14 @@ export class RemoteServer {
 
     // GET /state - full snapshot for the mobile UI to render
     this.app.get('/r/:token/state', (_req: Request, res: Response) => {
+      const layouts = this.deps.getAgentLayouts()
+      const agents = this.deps.getAgents().map(a => {
+        const layout = layouts[a.id]
+        return layout ? { ...a, x: layout.x, y: layout.y, width: layout.width, height: layout.height, color: layout.color } : a
+      })
       const snapshot = {
         projectName: this.deps.getProjectName(),
-        agents: this.deps.getAgents(),
+        agents,
         schedules: this.deps.getSchedules(),
         pinboardTasks: this.deps.getPinboardTasks(),
         infoEntries: this.deps.getInfoEntries(),

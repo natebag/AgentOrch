@@ -70,6 +70,18 @@ let remoteStatusTicker: ReturnType<typeof setInterval> | null = null
 let workshopPasscodeHash: string | null = null
 let cachedWorkspaceState: any = null
 
+// Mirror of the renderer's workshop window layout, kept current via IPC
+// from the Workspace component. Consumed by /state so remote clients
+// (mobile, 3DS) can render cards at desktop positions.
+interface WindowLayoutEntry {
+  x: number
+  y: number
+  width: number
+  height: number
+  color: string
+}
+const workshopLayoutCache = new Map<string, WindowLayoutEntry>()
+
 const CODEX_SUBMIT_DELAY = 2000   // Codex TUI needs text rendered before Enter is sent
 const RECONNECT_DELAY = 3000      // Wait before respawning a crashed agent
 const PROMPT_INJECT_FALLBACK_MS = 10000 // Safety net if StatusDetector doesn't detect prompt (Gemini, Kimi, etc.)
@@ -306,6 +318,11 @@ async function enableRemoteView(): Promise<void> {
     },
     onWorkshopPanelToggle: (update) => {
       mainWindow?.webContents.send(IPC.WORKSHOP_PANEL_TOGGLE, update)
+    },
+    getAgentLayouts: () => {
+      const out: Record<string, WindowLayoutEntry> = {}
+      for (const [id, entry] of workshopLayoutCache.entries()) out[id] = entry
+      return out
     },
   })
 
@@ -1666,6 +1683,18 @@ function setupIPC(): void {
   // Workspace state bridge (fire-and-forget from renderer)
   ipcMain.on(IPC.WORKSPACE_STATE_PUSH, (_event, state) => {
     cachedWorkspaceState = state
+  })
+
+  // Workshop layout mirror (fire-and-forget from renderer)
+  ipcMain.on(IPC.WORKSHOP_LAYOUT_SYNC, (_event, payload: Array<{ id: string } & WindowLayoutEntry>) => {
+    workshopLayoutCache.clear()
+    if (!Array.isArray(payload)) return
+    for (const entry of payload) {
+      if (!entry || typeof entry.id !== 'string') continue
+      const { id, x, y, width, height, color } = entry
+      if ([x, y, width, height].some(v => typeof v !== 'number' || !isFinite(v))) continue
+      workshopLayoutCache.set(id, { x, y, width, height, color: color ?? '#888888' })
+    }
   })
 
   // Usage IPC
