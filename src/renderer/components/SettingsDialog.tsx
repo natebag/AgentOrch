@@ -59,6 +59,10 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
   const [showQr, setShowQr] = useState(false)
   const [plainQr, setPlainQr] = useState(false)
   const [shortQrUrl, setShortQrUrl] = useState<string | null>(null)
+  const [show3dsPanel, setShow3dsPanel] = useState(false)
+  const [dsIp, setDsIp] = useState('')
+  const [dsPort, setDsPort] = useState('8336')
+  const [dsSendResult, setDsSendResult] = useState('')
   const [showCustomTimeout, setShowCustomTimeout] = useState(false)
   const [customTimeoutHours, setCustomTimeoutHours] = useState(8)
   const [passcodeSet, setPasscodeSet] = useState(false)
@@ -604,6 +608,62 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
                     <input type="checkbox" checked={plainQr} onChange={e => setPlainQr(e.target.checked)} />
                     <span>Plain QR (for old scanners — 3DS, feature phones)</span>
                   </label>
+                  <div
+                    onClick={() => setShow3dsPanel(!show3dsPanel)}
+                    style={{ fontSize: '11px', color: '#666', cursor: 'pointer', marginTop: '4px' }}
+                  >
+                    {show3dsPanel ? '▾' : '▸'} Send to 3DS
+                  </div>
+                  {show3dsPanel && (
+                    <div style={{ padding: '8px', background: '#1a1a1a', borderRadius: '6px', marginTop: '4px', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
+                        <input
+                          type="text" placeholder="3DS IP (e.g. 192.168.2.227)"
+                          value={dsIp} onChange={e => setDsIp(e.target.value)}
+                          style={{ flex: 1, padding: '4px 8px', background: '#111', border: '1px solid #333', borderRadius: '4px', color: '#eee', fontSize: '12px' }}
+                        />
+                        <input
+                          type="text" placeholder="Port"
+                          value={dsPort} onChange={e => setDsPort(e.target.value)}
+                          style={{ width: '60px', padding: '4px 8px', background: '#111', border: '1px solid #333', borderRadius: '4px', color: '#eee', fontSize: '12px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {remoteState.lanUrl && (
+                          <button
+                            onClick={async () => {
+                              setDsSendResult('Sending...')
+                              const r = await window.electronAPI.sendTo3DS(dsIp, parseInt(dsPort) || 8336, remoteState.lanUrl!)
+                              setDsSendResult(r)
+                            }}
+                            style={{ padding: '4px 10px', background: '#2a5a2a', color: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                          >
+                            Send LAN URL
+                          </button>
+                        )}
+                        {remoteState.publicUrl && (
+                          <button
+                            onClick={async () => {
+                              setDsSendResult('Sending...')
+                              const r = await window.electronAPI.sendTo3DS(dsIp, parseInt(dsPort) || 8336, remoteState.publicUrl!)
+                              setDsSendResult(r)
+                            }}
+                            style={{ padding: '4px 10px', background: '#2a3a5a', color: '#eee', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}
+                          >
+                            Send Tunnel URL
+                          </button>
+                        )}
+                      </div>
+                      {dsSendResult && (
+                        <div style={{ fontSize: '11px', color: dsSendResult.includes('Error') || dsSendResult.includes('Timeout') ? '#ef4444' : '#6ed76e', marginTop: '4px' }}>
+                          {dsSendResult}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
+                        On 3DS: press L on setup screen to start listening
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -1700,6 +1700,24 @@ function setupIPC(): void {
     }
   })
 
+  // Send URL to 3DS — raw TCP to the 3DS's network receiver
+  ipcMain.handle('send-to-3ds', async (_event, ip: string, port: number, url: string) => {
+    const net = await import('net')
+    return new Promise<string>((resolve) => {
+      const client = new net.Socket()
+      client.setTimeout(5000)
+      client.connect(port, ip, () => {
+        client.write(url + '\n')
+        client.end()
+      })
+      let response = ''
+      client.on('data', (data: Buffer) => { response += data.toString() })
+      client.on('end', () => resolve(response || 'Sent'))
+      client.on('error', (err: Error) => resolve(`Error: ${err.message}`))
+      client.on('timeout', () => { client.destroy(); resolve('Timeout — is the 3DS listening?') })
+    })
+  })
+
   // 3DS QR shortener — POST to 3ds.thecog.dev from the main process
   // (renderer fetch gets blocked by CSP)
   ipcMain.handle('register-short-link', async (_event, lan: string | null, tunnel: string | null) => {

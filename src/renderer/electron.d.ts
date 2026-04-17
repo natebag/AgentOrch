@@ -71,6 +71,7 @@ declare global {
       // Workshop layout mirror (renderer → main)
       syncWorkshopLayout: (layouts: Array<{ id: string; x: number; y: number; width: number; height: number; color: string }>) => void
       registerShortLink: (lan: string | null, tunnel: string | null) => Promise<string | null>
+      sendTo3DS: (ip: string, port: number, url: string) => Promise<string>
       // Per-agent theme
       setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
     }

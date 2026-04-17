@@ -173,6 +173,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send(IPC.WORKSHOP_LAYOUT_SYNC, layouts),
   registerShortLink: (lan: string | null, tunnel: string | null): Promise<string | null> =>
     ipcRenderer.invoke('register-short-link', lan, tunnel),
+  sendTo3DS: (ip: string, port: number, url: string): Promise<string> =>
+    ipcRenderer.invoke('send-to-3ds', ip, port, url),
   // Git
   gitStatus: () => ipcRenderer.invoke(IPC.GIT_STATUS),
   gitLog: (count?: number) => ipcRenderer.invoke(IPC.GIT_LOG, count),
