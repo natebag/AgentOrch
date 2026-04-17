@@ -1700,14 +1700,32 @@ function setupIPC(): void {
     }
   })
 
-  // Send URL to 3DS — raw TCP to the 3DS's network receiver
+  // Send URL to 3DS — raw TCP to the 3DS's network receiver.
+  // If the URL is HTTPS (tunnel), register a short code first and send
+  // the proxy URL (http://3ds.thecog.dev/p/CODE/) so the 3DS never
+  // needs to speak HTTPS — the Worker proxies for it.
   ipcMain.handle('send-to-3ds', async (_event, ip: string, port: number, url: string) => {
+    let sendUrl = url
+    if (url.startsWith('https://')) {
+      try {
+        const resp = await fetch('http://3ds.thecog.dev/api/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tunnel: url })
+        })
+        const data = await resp.json() as { code?: string }
+        if (data.code) {
+          sendUrl = `http://3ds.thecog.dev/p/${data.code}/`
+        }
+      } catch { /* fall through with original URL */ }
+    }
+
     const net = await import('net')
     return new Promise<string>((resolve) => {
       const client = new net.Socket()
       client.setTimeout(5000)
       client.connect(port, ip, () => {
-        client.write(url + '\n')
+        client.write(sendUrl + '\n')
         client.end()
       })
       let response = ''
