@@ -264,19 +264,25 @@ export class RemoteServer {
         const layout = layouts[a.id]
         return layout ? { ...a, x: layout.x, y: layout.y, width: layout.width, height: layout.height, color: layout.color } : a
       })
-      // Which panels are currently open on the desktop workspace (with positions)
+      // Inject open panel windows into the agents array so they flow
+      // through the same data path — the 3DS treats them as cards with
+      // a special status. No separate openPanels parsing needed.
       const ws = this.deps.getWorkspaceState()
-      const openPanels: { type: string; x: number; y: number; width: number; height: number }[] = []
       if (ws && Array.isArray(ws.windows)) {
         for (const w of ws.windows) {
           if (w.panelType && !w.minimized) {
-            openPanels.push({
-              type: w.panelType,
+            agents.push({
+              id: w.id,
+              name: w.panelType.charAt(0).toUpperCase() + w.panelType.slice(1),
+              cli: w.panelType,
+              status: 'panel',
+              role: 'panel',
               x: w.x ?? 0,
               y: w.y ?? 0,
               width: w.width ?? 300,
-              height: w.height ?? 200
-            })
+              height: w.height ?? 200,
+              color: '#333333'
+            } as any)
           }
         }
       }
@@ -291,8 +297,7 @@ export class RemoteServer {
         serverTime: Date.now(),
         sessionExpiresAt: this.deps.tokenManager.getExpiresAt(),
         workshopPasscodeSet: this.deps.getWorkshopPasscodeSet(),
-        presets: this.deps.getPresets(),
-        openPanels
+        presets: this.deps.getPresets()
       }
       res.json(snapshot)
     })
