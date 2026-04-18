@@ -264,6 +264,17 @@ export class RemoteServer {
         const layout = layouts[a.id]
         return layout ? { ...a, x: layout.x, y: layout.y, width: layout.width, height: layout.height, color: layout.color } : a
       })
+      // Which panels are currently open on the desktop workspace
+      const ws = this.deps.getWorkspaceState()
+      const openPanels: string[] = []
+      if (ws && Array.isArray(ws.windows)) {
+        for (const w of ws.windows) {
+          if (w.panelType && !w.minimized) {
+            openPanels.push(w.panelType)
+          }
+        }
+      }
+
       const snapshot = {
         projectName: this.deps.getProjectName(),
         agents,
@@ -273,7 +284,9 @@ export class RemoteServer {
         connectionCount: this.deps.tokenManager.getConnectionCount(),
         serverTime: Date.now(),
         sessionExpiresAt: this.deps.tokenManager.getExpiresAt(),
-        workshopPasscodeSet: this.deps.getWorkshopPasscodeSet()
+        workshopPasscodeSet: this.deps.getWorkshopPasscodeSet(),
+        presets: this.deps.getPresets(),
+        openPanels
       }
       res.json(snapshot)
     })
