@@ -28,6 +28,8 @@ import { CloudflaredManager } from './remote/cloudflared-manager'
 import { RemoteServer } from './remote/remote-server'
 import * as communityClient from './community/community-client'
 import * as themesStore from './themes/themes-store'
+import * as workspaceThemeStore from './themes/workspace-theme-store'
+import { getWorkspaceThemeById, WORKSPACE_THEMES } from '../shared/workspace-themes'
 import { migrateLegacyUserData } from './migration/userdata-migration'
 import type { AgentConfig, AgentTheme, RemoteSetupProgress, CommunityAgent, CommunityCategory } from '../shared/types'
 import { IPC } from '../shared/types'
@@ -795,6 +797,19 @@ function handleSpawnAgent(config: AgentConfig): { id: string; mcpConfigPath: str
   if (!config.theme && projectPath) {
     const savedTheme = themesStore.getTheme(projectPath, config.name)
     if (savedTheme) config.theme = savedTheme
+  }
+
+  // Auto-theme from active workspace theme if no per-agent theme was set
+  if (!config.theme) {
+    const activeId = workspaceThemeStore.getActiveThemeId()
+    if (activeId) {
+      // Check built-in themes first, then custom
+      const wsTheme = getWorkspaceThemeById(activeId)
+        ?? workspaceThemeStore.getCustomThemes().find(t => t.id === activeId)
+      if (wsTheme) {
+        config.theme = wsTheme.roleColors[config.role] ?? wsTheme.fallback
+      }
+    }
   }
 
   const mcpServerPath = getMcpServerPath()
@@ -1981,6 +1996,46 @@ function setupIPC(): void {
     }
   })
 
+  // Community themes — browse/share/star workspace themes via GitHub Issues
+  ipcMain.handle(IPC.COMMUNITY_THEME_LIST, async (_event, opts?: { force?: boolean }) => {
+    try {
+      const items = await communityClient.listThemes(opts ?? {})
+      return { success: true, items }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.COMMUNITY_THEME_GET, async (_event, issueNumber: number) => {
+    try {
+      const theme = await communityClient.getTheme(issueNumber)
+      const myHash = communityClient.getMachineHash()
+      return { success: true, theme, isStarredByMe: theme.starredBy.includes(myHash) }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.COMMUNITY_THEME_SHARE, async (_event, input: { name: string; description: string; author: string; roleColors: Record<string, Required<AgentTheme>>; fallback: Required<AgentTheme> }) => {
+    try {
+      if (!input.name?.trim()) return { success: false, error: 'Name is required' }
+      if (!input.author?.trim()) return { success: false, error: 'Author is required' }
+      const theme = await communityClient.shareTheme(input)
+      return { success: true, theme }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle(IPC.COMMUNITY_THEME_TOGGLE_STAR, async (_event, issueNumber: number) => {
+    try {
+      const result = await communityClient.toggleThemeStar(issueNumber)
+      return { success: true, ...result }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
   // Per-agent theme — updates the in-memory config, persists to disk, broadcasts state
   ipcMain.handle(IPC.AGENT_SET_THEME, (_event, agentId: string, theme: AgentTheme | null) => {
     const managed = agents.get(agentId)
@@ -2001,6 +2056,22 @@ function setupIPC(): void {
     if (projectPath) themesStore.setTheme(projectPath, managed.config.name, theme)
     // Broadcast to all renderers so the window re-renders with the new theme
     mainWindow?.webContents.send(IPC.AGENT_STATE_UPDATE, getVisibleAgents())
+    return { success: true }
+  })
+
+  // Workspace themes — bulk-apply palette by role
+  ipcMain.handle(IPC.WORKSPACE_THEME_GET_ACTIVE, () => workspaceThemeStore.getActiveThemeId())
+  ipcMain.handle(IPC.WORKSPACE_THEME_SET_ACTIVE, (_event, id: string | null) => {
+    workspaceThemeStore.setActiveThemeId(id)
+    return { success: true }
+  })
+  ipcMain.handle(IPC.WORKSPACE_THEME_LIST_CUSTOM, () => workspaceThemeStore.getCustomThemes())
+  ipcMain.handle(IPC.WORKSPACE_THEME_SAVE_CUSTOM, (_event, theme: import('../shared/types').WorkspaceTheme) => {
+    workspaceThemeStore.saveCustomTheme(theme)
+    return { success: true }
+  })
+  ipcMain.handle(IPC.WORKSPACE_THEME_DELETE_CUSTOM, (_event, id: string) => {
+    workspaceThemeStore.deleteCustomTheme(id)
     return { success: true }
   })
 
@@ -2168,6 +2239,9 @@ async function main(): Promise<void> {
 
   // Per-agent theme persistence — keyed by project path + agent name
   themesStore.setThemesPath(path.join(app.getPath('userData'), 'themes.json'))
+
+  // Workspace theme persistence — active theme ID + custom themes
+  workspaceThemeStore.setFilePath(path.join(app.getPath('userData'), 'workspace-themes.json'))
 
   // Skills: built-in from app resources, user skills in userData
   const builtInSkillsDir = app.isPackaged

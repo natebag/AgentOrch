@@ -1,4 +1,4 @@
-import type { AgentConfig, AgentState, AgentTheme, HubInfo, PinboardTask, InfoEntry, WorkspacePreset, Skill, CreateScheduleInput, EditScheduleInput, CommunityTeam, CommunityTeamListItem, CommunityAgent, CommunityCategory } from '../shared/types'
+import type { AgentConfig, AgentState, AgentTheme, HubInfo, PinboardTask, InfoEntry, WorkspacePreset, WorkspaceTheme, Skill, CreateScheduleInput, EditScheduleInput, CommunityTeam, CommunityTeamListItem, CommunityAgent, CommunityCategory, CommunityTheme, CommunityThemeListItem } from '../shared/types'
 
 declare global {
   interface Window {
@@ -74,6 +74,17 @@ declare global {
       sendTo3DS: (ip: string, port: number, url: string) => Promise<string>
       // Per-agent theme
       setAgentTheme: (agentId: string, theme: AgentTheme | null) => Promise<{ success: boolean; error?: string }>
+      // Community themes
+      communityThemeList: (opts?: { force?: boolean }) => Promise<{ success: true; items: CommunityThemeListItem[] } | { success: false; error: string }>
+      communityThemeGet: (issueNumber: number) => Promise<{ success: true; theme: CommunityTheme; isStarredByMe: boolean } | { success: false; error: string }>
+      communityThemeShare: (input: { name: string; description: string; author: string; roleColors: Record<string, Required<AgentTheme>>; fallback: Required<AgentTheme> }) => Promise<{ success: true; theme: CommunityTheme } | { success: false; error: string }>
+      communityThemeToggleStar: (issueNumber: number) => Promise<{ success: true; stars: number; isStarredByMe: boolean } | { success: false; error: string }>
+      // Workspace themes
+      getActiveWorkspaceTheme: () => Promise<string | null>
+      setActiveWorkspaceTheme: (id: string | null) => Promise<{ success: boolean }>
+      listCustomWorkspaceThemes: () => Promise<WorkspaceTheme[]>
+      saveCustomWorkspaceTheme: (theme: WorkspaceTheme) => Promise<{ success: boolean }>
+      deleteCustomWorkspaceTheme: (id: string) => Promise<{ success: boolean }>
     }
   }
 }

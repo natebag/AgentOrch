@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   communityToggleStar: (issueNumber: number) => ipcRenderer.invoke(IPC.COMMUNITY_TOGGLE_STAR, issueNumber),
   // Per-agent theme
   setAgentTheme: (agentId: string, theme: unknown) => ipcRenderer.invoke(IPC.AGENT_SET_THEME, agentId, theme),
+  // Community themes
+  communityThemeList: (opts?: { force?: boolean }) => ipcRenderer.invoke(IPC.COMMUNITY_THEME_LIST, opts),
+  communityThemeGet: (issueNumber: number) => ipcRenderer.invoke(IPC.COMMUNITY_THEME_GET, issueNumber),
+  communityThemeShare: (input: unknown) => ipcRenderer.invoke(IPC.COMMUNITY_THEME_SHARE, input),
+  communityThemeToggleStar: (issueNumber: number) => ipcRenderer.invoke(IPC.COMMUNITY_THEME_TOGGLE_STAR, issueNumber),
+  // Workspace themes
+  getActiveWorkspaceTheme: () => ipcRenderer.invoke(IPC.WORKSPACE_THEME_GET_ACTIVE),
+  setActiveWorkspaceTheme: (id: string | null) => ipcRenderer.invoke(IPC.WORKSPACE_THEME_SET_ACTIVE, id),
+  listCustomWorkspaceThemes: () => ipcRenderer.invoke(IPC.WORKSPACE_THEME_LIST_CUSTOM),
+  saveCustomWorkspaceTheme: (theme: unknown) => ipcRenderer.invoke(IPC.WORKSPACE_THEME_SAVE_CUSTOM, theme),
+  deleteCustomWorkspaceTheme: (id: string) => ipcRenderer.invoke(IPC.WORKSPACE_THEME_DELETE_CUSTOM, id),
   getInfoEntries: (tabId?: string) => ipcRenderer.invoke(IPC.INFO_GET_ENTRIES, tabId),
   onInfoUpdate: (callback: (entries: unknown[]) => void) => {
     const handler = (_event: unknown, entries: unknown[]) => callback(entries)

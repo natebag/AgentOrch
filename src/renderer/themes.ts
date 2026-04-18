@@ -96,3 +96,6 @@ export function resolveTheme(theme: AgentTheme | undefined): Required<AgentTheme
     text: theme.text ?? DEFAULT_THEME.text
   }
 }
+
+// Re-export workspace themes from shared module (used by both main and renderer).
+export { WORKSPACE_THEMES, getWorkspaceThemeById } from '../shared/workspace-themes'

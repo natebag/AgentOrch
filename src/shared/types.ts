@@ -9,6 +9,20 @@ export interface AgentTheme {
   text?: string    // terminal default text color (ANSI sequences still override)
 }
 
+// A workspace theme maps agent roles to color palettes.
+// Built-in themes are hardcoded; custom themes are persisted in userData.
+export interface WorkspaceTheme {
+  id: string
+  label: string
+  description: string
+  roleColors: Record<string, Required<AgentTheme>>  // role → full color set
+  fallback: Required<AgentTheme>                      // agents with no matching role
+  meta?: {
+    author?: string
+    version?: number
+  }
+}
+
 export interface AgentConfig {
   id: string
   name: string
@@ -188,6 +202,17 @@ export const IPC = {
   WORKSHOP_PANEL_TOGGLE: 'workshop:panel-toggle',
   // Workshop: renderer → main layout mirror for /state
   WORKSHOP_LAYOUT_SYNC: 'workshop:layout-sync',
+  // Workspace themes
+  WORKSPACE_THEME_GET_ACTIVE: 'workspace-theme:get-active',
+  WORKSPACE_THEME_SET_ACTIVE: 'workspace-theme:set-active',
+  WORKSPACE_THEME_LIST_CUSTOM: 'workspace-theme:list-custom',
+  WORKSPACE_THEME_SAVE_CUSTOM: 'workspace-theme:save-custom',
+  WORKSPACE_THEME_DELETE_CUSTOM: 'workspace-theme:delete-custom',
+  // Community themes
+  COMMUNITY_THEME_LIST: 'community-theme:list',
+  COMMUNITY_THEME_GET: 'community-theme:get',
+  COMMUNITY_THEME_SHARE: 'community-theme:share',
+  COMMUNITY_THEME_TOGGLE_STAR: 'community-theme:toggle-star',
 } as const
 
 export interface Skill {
@@ -360,6 +385,31 @@ export interface CommunityTeamListItem {
   stars: number
   createdAt: string
   isStarredByMe: boolean
+}
+
+// Community-shared workspace theme — same GitHub Issues pattern as CommunityTeam.
+export interface CommunityTheme {
+  version: 1
+  issueNumber?: number
+  name: string
+  description: string
+  author: string
+  roleColors: Record<string, Required<AgentTheme>>
+  fallback: Required<AgentTheme>
+  stars: number
+  starredBy: string[]
+  createdAt: string
+}
+
+export interface CommunityThemeListItem {
+  issueNumber: number
+  name: string
+  description: string
+  author: string
+  stars: number
+  createdAt: string
+  isStarredByMe: boolean
+  previewColors: string[]  // border colors for the first 4 roles, for swatches
 }
 
 export interface FireHistoryEntry {

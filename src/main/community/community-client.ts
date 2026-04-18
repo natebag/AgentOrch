@@ -2,16 +2,20 @@ import * as crypto from 'crypto'
 import * as os from 'os'
 import type {
   AgentConfig,
+  AgentTheme,
   CommunityAgent,
   CommunityTeam,
   CommunityTeamListItem,
-  CommunityCategory
+  CommunityCategory,
+  CommunityTheme,
+  CommunityThemeListItem
 } from '../../shared/types'
 
-// GitHub repo hosting community teams as Issues.
+// GitHub repo hosting community teams and themes as Issues (differentiated by label).
 const OWNER = 'the-cog-dev'
 const REPO = 'community-teams'
 const LABEL = 'community-team'
+const THEME_LABEL = 'community-theme'
 
 // Obfuscated fine-grained PAT — issues: read/write on the-cog-dev/community-teams only.
 // XOR-obfuscated to avoid plaintext scanners. Not secret-security — anyone reading this
@@ -289,4 +293,179 @@ export function invalidateListCache(): void {
 // Narrow helper for the IPC layer to validate category inputs.
 export function isValidCategory(value: unknown): value is CommunityCategory {
   return typeof value === 'string' && ['research','coding','review','full-stack','decomp','mixed','other'].includes(value)
+}
+
+// ---------------------------------------------------------------------------
+// Community Themes — same GitHub Issues pattern, different label.
+// ---------------------------------------------------------------------------
+
+let _themeListCache: { items: CommunityThemeListItem[]; fetchedAt: number } | null = null
+
+function hydrateAgentTheme(raw: unknown): Required<AgentTheme> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const chrome = asString(r.chrome, 50)
+  const border = asString(r.border, 50)
+  const bg = asString(r.bg, 50)
+  const text = asString(r.text, 50)
+  if (!chrome || !border || !bg || !text) return null
+  return { chrome, border, bg, text }
+}
+
+function hydrateCommunityTheme(raw: unknown, issueNumber: number): CommunityTheme | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const name = asString(r.name, 200)
+  const description = asString(r.description, 5000)
+  const author = asString(r.author, 200)
+  if (!name) return null
+
+  const fallback = hydrateAgentTheme(r.fallback)
+  if (!fallback) return null
+
+  const roleColors: Record<string, Required<AgentTheme>> = {}
+  if (r.roleColors && typeof r.roleColors === 'object') {
+    const rc = r.roleColors as Record<string, unknown>
+    for (const [role, val] of Object.entries(rc)) {
+      const parsed = hydrateAgentTheme(val)
+      if (parsed) roleColors[role.slice(0, 200)] = parsed
+    }
+  }
+
+  return {
+    version: 1,
+    issueNumber,
+    name,
+    description,
+    author,
+    roleColors,
+    fallback,
+    stars: typeof r.stars === 'number' && Number.isFinite(r.stars) && r.stars >= 0 ? Math.floor(r.stars) : 0,
+    starredBy: asStringArray(r.starredBy, 10000, 12),
+    createdAt: asString(r.createdAt, 100)
+  }
+}
+
+function parseThemeFromIssue(issue: { number: number; body: string | null }): CommunityTheme | null {
+  if (!issue.body) return null
+  const match = issue.body.match(/```json\s*([\s\S]*?)\s*```/)
+  const jsonStr = match ? match[1] : issue.body
+  try {
+    return hydrateCommunityTheme(JSON.parse(jsonStr), issue.number)
+  } catch {
+    return null
+  }
+}
+
+function themeToListItem(theme: CommunityTheme, myHash: string): CommunityThemeListItem {
+  const roles = ['orchestrator', 'worker', 'researcher', 'reviewer']
+  const previewColors = roles.map(r => (theme.roleColors[r] ?? theme.fallback).border)
+  return {
+    issueNumber: theme.issueNumber!,
+    name: theme.name,
+    description: theme.description,
+    author: theme.author,
+    stars: theme.stars,
+    createdAt: theme.createdAt,
+    isStarredByMe: theme.starredBy.includes(myHash),
+    previewColors
+  }
+}
+
+export async function listThemes(opts: { force?: boolean } = {}): Promise<CommunityThemeListItem[]> {
+  if (!opts.force && _themeListCache && Date.now() - _themeListCache.fetchedAt < LIST_CACHE_TTL_MS) {
+    return _themeListCache.items
+  }
+  const res = await apiFetch(`/repos/${OWNER}/${REPO}/issues?labels=${THEME_LABEL}&state=open&sort=created&direction=desc&per_page=100`)
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`GitHub API ${res.status}: ${err}`)
+  }
+  const issues = await res.json() as Array<{ number: number; body: string | null; title: string; pull_request?: unknown }>
+  const myHash = getMachineHash()
+  const items: CommunityThemeListItem[] = []
+  for (const issue of issues) {
+    if (issue.pull_request) continue
+    const theme = parseThemeFromIssue(issue)
+    if (theme) items.push(themeToListItem(theme, myHash))
+  }
+  _themeListCache = { items, fetchedAt: Date.now() }
+  return items
+}
+
+export async function getTheme(issueNumber: number): Promise<CommunityTheme> {
+  if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+    throw new Error('Invalid issue number')
+  }
+  const res = await apiFetch(`/repos/${OWNER}/${REPO}/issues/${issueNumber}`)
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`GitHub API ${res.status}: ${err}`)
+  }
+  const issue = await res.json() as { number: number; body: string | null; title: string }
+  const theme = parseThemeFromIssue(issue)
+  if (!theme) throw new Error(`Issue #${issueNumber} is not a valid community theme`)
+  return theme
+}
+
+export async function shareTheme(input: { name: string; description: string; author: string; roleColors: Record<string, Required<AgentTheme>>; fallback: Required<AgentTheme> }): Promise<CommunityTheme> {
+  const theme: CommunityTheme = {
+    version: 1,
+    name: input.name,
+    description: input.description,
+    author: input.author,
+    roleColors: input.roleColors,
+    fallback: input.fallback,
+    stars: 0,
+    starredBy: [],
+    createdAt: new Date().toISOString()
+  }
+
+  const body = `\`\`\`json\n${JSON.stringify(theme, null, 2)}\n\`\`\`\n\n---\n\n*Shared from theCog — community workspace theme. Import this into your own Cog workspace.*`
+
+  const res = await apiFetch(`/repos/${OWNER}/${REPO}/issues`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: `[Theme] ${theme.name}`,
+      body,
+      labels: [THEME_LABEL]
+    })
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`GitHub API ${res.status}: ${err}`)
+  }
+  const issue = await res.json() as { number: number }
+  _themeListCache = null
+  return { ...theme, issueNumber: issue.number }
+}
+
+export async function toggleThemeStar(issueNumber: number): Promise<{ stars: number; isStarredByMe: boolean }> {
+  const theme = await getTheme(issueNumber)
+  const myHash = getMachineHash()
+  const already = theme.starredBy.includes(myHash)
+
+  const newStarredBy = already
+    ? theme.starredBy.filter(h => h !== myHash)
+    : [...theme.starredBy, myHash]
+  const newStars = already ? Math.max(0, theme.stars - 1) : theme.stars + 1
+
+  const updated: CommunityTheme = { ...theme, stars: newStars, starredBy: newStarredBy }
+  const newBody = `\`\`\`json\n${JSON.stringify(updated, null, 2)}\n\`\`\`\n\n---\n\n*Shared from theCog — community workspace theme. Import this into your own Cog workspace.*`
+
+  const res = await apiFetch(`/repos/${OWNER}/${REPO}/issues/${issueNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ body: newBody })
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`GitHub API ${res.status}: ${err}`)
+  }
+  if (_themeListCache) {
+    const idx = _themeListCache.items.findIndex(i => i.issueNumber === issueNumber)
+    if (idx >= 0) {
+      _themeListCache.items[idx] = { ..._themeListCache.items[idx], stars: newStars, isStarredByMe: !already }
+    }
+  }
+  return { stars: newStars, isStarredByMe: !already }
 }

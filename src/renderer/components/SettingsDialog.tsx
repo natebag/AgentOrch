@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import QRCode from 'qrcode-svg'
-import type { AgentState } from '../../shared/types'
-import { ROLE_THEME_DEFAULTS, getPresetById, THEME_PRESETS } from '../themes'
+import type { AgentState, WorkspaceTheme, CommunityThemeListItem, CommunityTheme, AgentTheme } from '../../shared/types'
+import { ROLE_THEME_DEFAULTS, getPresetById, THEME_PRESETS, WORKSPACE_THEMES, getWorkspaceThemeById } from '../themes'
 
 declare const electronAPI: {
   getSettings: () => Promise<Record<string, any>>
@@ -25,20 +25,30 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): React.ReactElement {
   const [themeApplyMsg, setThemeApplyMsg] = useState<string | null>(null)
+  const [activeWsThemeId, setActiveWsThemeId] = useState<string | null>(null)
+  const [customThemes, setCustomThemes] = useState<WorkspaceTheme[]>([])
+  const [customThemeName, setCustomThemeName] = useState('')
+  const [showSaveCustom, setShowSaveCustom] = useState(false)
 
-  const applyThemeByRole = async () => {
+  useEffect(() => {
+    window.electronAPI.getActiveWorkspaceTheme().then(setActiveWsThemeId)
+    window.electronAPI.listCustomWorkspaceThemes().then(setCustomThemes)
+  }, [])
+
+  const allThemes = useMemo(() => [...WORKSPACE_THEMES, ...customThemes], [customThemes])
+
+  const applyWorkspaceTheme = useCallback(async (theme: WorkspaceTheme) => {
     let applied = 0
     for (const agent of agents) {
-      const presetId = ROLE_THEME_DEFAULTS[agent.role]
-      if (!presetId) continue
-      const preset = getPresetById(presetId)
-      if (!preset) continue
-      await window.electronAPI.setAgentTheme(agent.id, preset.theme)
+      const colors = theme.roleColors[agent.role] ?? theme.fallback
+      await window.electronAPI.setAgentTheme(agent.id, colors)
       applied++
     }
-    setThemeApplyMsg(`Applied themes to ${applied} agent${applied !== 1 ? 's' : ''}`)
+    await window.electronAPI.setActiveWorkspaceTheme(theme.id)
+    setActiveWsThemeId(theme.id)
+    setThemeApplyMsg(`Applied "${theme.label}" to ${applied} agent${applied !== 1 ? 's' : ''}`)
     setTimeout(() => setThemeApplyMsg(null), 2500)
-  }
+  }, [agents])
 
   const clearAllThemes = async () => {
     let cleared = 0
@@ -48,8 +58,129 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
         cleared++
       }
     }
+    await window.electronAPI.setActiveWorkspaceTheme(null)
+    setActiveWsThemeId(null)
     setThemeApplyMsg(`Cleared themes from ${cleared} agent${cleared !== 1 ? 's' : ''}`)
     setTimeout(() => setThemeApplyMsg(null), 2500)
+  }
+
+  const saveCurrentAsTheme = async () => {
+    const name = customThemeName.trim()
+    if (!name || agents.length === 0) return
+    const roleColors: Record<string, Required<import('../../shared/types').AgentTheme>> = {}
+    let fallbackTheme = { chrome: '#1e1e1e', border: '#333333', bg: '#0d0d0d', text: '#e0e0e0' }
+    for (const agent of agents) {
+      if (agent.theme) {
+        const full = {
+          chrome: agent.theme.chrome ?? '#1e1e1e',
+          border: agent.theme.border ?? '#333333',
+          bg: agent.theme.bg ?? '#0d0d0d',
+          text: agent.theme.text ?? '#e0e0e0'
+        }
+        if (agent.role) roleColors[agent.role] = full
+        fallbackTheme = full
+      }
+    }
+    const id = `custom-${Date.now()}`
+    const theme: WorkspaceTheme = {
+      id,
+      label: name,
+      description: 'Custom theme',
+      roleColors,
+      fallback: fallbackTheme,
+      meta: { version: 1 }
+    }
+    await window.electronAPI.saveCustomWorkspaceTheme(theme)
+    setCustomThemes(prev => [...prev, theme])
+    setCustomThemeName('')
+    setShowSaveCustom(false)
+    setThemeApplyMsg(`Saved "${name}"`)
+    setTimeout(() => setThemeApplyMsg(null), 2500)
+  }
+
+  const deleteCustomTheme = async (id: string) => {
+    await window.electronAPI.deleteCustomWorkspaceTheme(id)
+    setCustomThemes(prev => prev.filter(t => t.id !== id))
+    if (activeWsThemeId === id) {
+      setActiveWsThemeId(null)
+      await window.electronAPI.setActiveWorkspaceTheme(null)
+    }
+  }
+
+  // Community themes
+  const [showCommunityThemes, setShowCommunityThemes] = useState(false)
+  const [communityThemes, setCommunityThemes] = useState<CommunityThemeListItem[]>([])
+  const [communityLoading, setCommunityLoading] = useState(false)
+  const [communityError, setCommunityError] = useState<string | null>(null)
+  const [showShareForm, setShowShareForm] = useState(false)
+  const [shareAuthor, setShareAuthor] = useState('')
+  const [shareDescription, setShareDescription] = useState('')
+
+  const browseCommunityThemes = async (force = false) => {
+    setCommunityLoading(true)
+    setCommunityError(null)
+    const res = await window.electronAPI.communityThemeList({ force })
+    if (res.success) {
+      setCommunityThemes(res.items)
+    } else {
+      setCommunityError(res.error)
+    }
+    setCommunityLoading(false)
+  }
+
+  const downloadCommunityTheme = async (item: CommunityThemeListItem) => {
+    const res = await window.electronAPI.communityThemeGet(item.issueNumber)
+    if (!res.success) {
+      setThemeApplyMsg(`Error: ${res.error}`)
+      setTimeout(() => setThemeApplyMsg(null), 3000)
+      return
+    }
+    const ct = res.theme
+    const wsTheme: WorkspaceTheme = {
+      id: `community-${ct.issueNumber}`,
+      label: ct.name,
+      description: ct.description,
+      roleColors: ct.roleColors,
+      fallback: ct.fallback,
+      meta: { author: ct.author, version: 1 }
+    }
+    await window.electronAPI.saveCustomWorkspaceTheme(wsTheme)
+    setCustomThemes(prev => {
+      if (prev.find(t => t.id === wsTheme.id)) return prev
+      return [...prev, wsTheme]
+    })
+    setThemeApplyMsg(`Downloaded "${ct.name}"`)
+    setTimeout(() => setThemeApplyMsg(null), 2500)
+  }
+
+  const shareCommunityTheme = async (theme: WorkspaceTheme) => {
+    if (!shareAuthor.trim()) return
+    const res = await window.electronAPI.communityThemeShare({
+      name: theme.label,
+      description: shareDescription.trim() || theme.description,
+      author: shareAuthor.trim(),
+      roleColors: theme.roleColors,
+      fallback: theme.fallback
+    })
+    if (res.success) {
+      setThemeApplyMsg(`Shared "${theme.label}" to community!`)
+      setShowShareForm(false)
+      setShareAuthor('')
+      setShareDescription('')
+      browseCommunityThemes(true)
+    } else {
+      setThemeApplyMsg(`Error: ${res.error}`)
+    }
+    setTimeout(() => setThemeApplyMsg(null), 3000)
+  }
+
+  const toggleThemeStar = async (issueNumber: number) => {
+    const res = await window.electronAPI.communityThemeToggleStar(issueNumber)
+    if (res.success) {
+      setCommunityThemes(prev => prev.map(t =>
+        t.issueNumber === issueNumber ? { ...t, stars: res.stars, isStarredByMe: res.isStarredByMe } : t
+      ))
+    }
   }
 
   const [settings, setSettings] = useState<Record<string, any>>({})
@@ -262,58 +393,240 @@ export function SettingsDialog({ onClose, agents = [] }: SettingsDialogProps): R
           </label>
         </div>
 
-        {/* Themes section */}
+        {/* Workspace Themes section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid #333', paddingTop: '16px' }}>
           <div style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Agent Themes
+            Themes
           </div>
           <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.5' }}>
-            Right-click any terminal title bar to customize colors.
-            Or apply role-based defaults to all current agents at once:
+            Click a theme to color all agents by role. Right-click any terminal title bar to override individual agents.
           </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {Object.entries(ROLE_THEME_DEFAULTS).map(([role, presetId]) => {
-              const preset = getPresetById(presetId)
-              if (!preset) return null
+
+          {/* Theme gallery */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+            {allThemes.map(theme => {
+              const isActive = activeWsThemeId === theme.id
+              const isCustom = !WORKSPACE_THEMES.find(t => t.id === theme.id)
+              const swatchColors = ['orchestrator', 'worker', 'researcher', 'reviewer'].map(
+                role => (theme.roleColors[role] ?? theme.fallback).border
+              )
               return (
-                <span key={role} style={{
-                  fontSize: '10px',
-                  padding: '3px 8px',
-                  borderRadius: '10px',
-                  backgroundColor: preset.theme.chrome,
-                  border: `1px solid ${preset.theme.border}`,
-                  color: preset.theme.text
-                }}>
-                  {role} {preset.emoji}
-                </span>
+                <div
+                  key={theme.id}
+                  onClick={() => agents.length > 0 && applyWorkspaceTheme(theme)}
+                  style={{
+                    padding: '8px',
+                    backgroundColor: isActive ? '#2a2a2a' : '#1a1a1a',
+                    border: isActive ? '2px solid #3b82f6' : '1px solid #333',
+                    borderRadius: '6px',
+                    cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: agents.length === 0 ? 0.5 : 1,
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ fontSize: '11px', color: '#e0e0e0', marginBottom: '4px', fontWeight: isActive ? 600 : 400 }}>
+                    {theme.label}
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {swatchColors.map((color, i) => (
+                      <div key={i} style={{
+                        width: '16px', height: '16px', borderRadius: '50%',
+                        backgroundColor: color, border: '1px solid rgba(255,255,255,0.15)'
+                      }} />
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '9px', color: '#555', marginTop: '3px' }}>
+                    {theme.description}
+                  </div>
+                  {isCustom && (
+                    <div
+                      onClick={e => { e.stopPropagation(); deleteCustomTheme(theme.id) }}
+                      style={{
+                        position: 'absolute', top: '4px', right: '6px',
+                        fontSize: '12px', color: '#555', cursor: 'pointer', lineHeight: 1
+                      }}
+                      title="Delete custom theme"
+                    >x</div>
+                  )}
+                </div>
               )
             })}
           </div>
+
+          {/* Save current + clear */}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
-              onClick={applyThemeByRole}
+              onClick={() => setShowSaveCustom(!showSaveCustom)}
               disabled={agents.length === 0}
               style={{
-                flex: 1, padding: '8px', backgroundColor: '#3b82f6', color: '#fff',
-                border: 'none', borderRadius: '4px', cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
+                flex: 1, padding: '8px', backgroundColor: '#333', color: '#e0e0e0',
+                border: '1px solid #444', borderRadius: '4px',
+                cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
                 fontSize: '12px', opacity: agents.length === 0 ? 0.5 : 1
               }}
-            >🎨 Apply theme by role</button>
+            >Save current as theme</button>
             <button
               onClick={clearAllThemes}
               disabled={agents.length === 0}
               style={{
                 padding: '8px 12px', backgroundColor: '#444', color: '#e0e0e0',
-                border: 'none', borderRadius: '4px', cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
+                border: 'none', borderRadius: '4px',
+                cursor: agents.length === 0 ? 'not-allowed' : 'pointer',
                 fontSize: '12px', opacity: agents.length === 0 ? 0.5 : 1
               }}
             >Clear all</button>
           </div>
+
+          {showSaveCustom && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input
+                type="text"
+                placeholder="Theme name..."
+                value={customThemeName}
+                onChange={e => setCustomThemeName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveCurrentAsTheme()}
+                autoFocus
+                style={{
+                  flex: 1, padding: '6px 8px', backgroundColor: '#252525', color: '#e0e0e0',
+                  border: '1px solid #444', borderRadius: '4px', fontSize: '12px'
+                }}
+              />
+              <button
+                onClick={saveCurrentAsTheme}
+                disabled={!customThemeName.trim()}
+                style={{
+                  padding: '6px 12px', backgroundColor: '#3b82f6', color: '#fff',
+                  border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
+                  opacity: customThemeName.trim() ? 1 : 0.5
+                }}
+              >Save</button>
+            </div>
+          )}
+
           {themeApplyMsg && (
             <div style={{ fontSize: '11px', color: '#6ee7b7', padding: '4px 8px', backgroundColor: '#1a2e1a', borderRadius: '4px' }}>
               {themeApplyMsg}
             </div>
           )}
+
+          {/* Community themes */}
+          <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: '10px', marginTop: '4px' }}>
+            <div
+              onClick={() => { setShowCommunityThemes(!showCommunityThemes); if (!showCommunityThemes && communityThemes.length === 0) browseCommunityThemes() }}
+              style={{ fontSize: '11px', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <span>{showCommunityThemes ? '▾' : '▸'}</span>
+              <span style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>Community Themes</span>
+            </div>
+
+            {showCommunityThemes && (
+              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => browseCommunityThemes(true)}
+                    disabled={communityLoading}
+                    style={{
+                      flex: 1, padding: '6px', backgroundColor: '#333', color: '#e0e0e0',
+                      border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', fontSize: '11px',
+                      opacity: communityLoading ? 0.5 : 1
+                    }}
+                  >{communityLoading ? 'Loading...' : 'Refresh'}</button>
+                  {customThemes.length > 0 && (
+                    <button
+                      onClick={() => setShowShareForm(!showShareForm)}
+                      style={{
+                        flex: 1, padding: '6px', backgroundColor: '#1a2e3a', color: '#7ec4f5',
+                        border: '1px solid #2a4a5a', borderRadius: '4px', cursor: 'pointer', fontSize: '11px'
+                      }}
+                    >Share a theme</button>
+                  )}
+                </div>
+
+                {showShareForm && customThemes.length > 0 && (
+                  <div style={{ padding: '8px', backgroundColor: '#1a1a1a', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ fontSize: '10px', color: '#888' }}>Share a custom theme to the community:</div>
+                    <input
+                      type="text" placeholder="Your name" value={shareAuthor}
+                      onChange={e => setShareAuthor(e.target.value)}
+                      style={{ padding: '4px 8px', backgroundColor: '#252525', color: '#e0e0e0', border: '1px solid #444', borderRadius: '4px', fontSize: '11px' }}
+                    />
+                    <input
+                      type="text" placeholder="Description (optional)" value={shareDescription}
+                      onChange={e => setShareDescription(e.target.value)}
+                      style={{ padding: '4px 8px', backgroundColor: '#252525', color: '#e0e0e0', border: '1px solid #444', borderRadius: '4px', fontSize: '11px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      {customThemes.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => shareCommunityTheme(t)}
+                          disabled={!shareAuthor.trim()}
+                          style={{
+                            padding: '4px 10px', backgroundColor: '#2a3a2a', color: '#7ef598',
+                            border: '1px solid #3a5a3a', borderRadius: '4px', cursor: shareAuthor.trim() ? 'pointer' : 'not-allowed',
+                            fontSize: '10px', opacity: shareAuthor.trim() ? 1 : 0.5
+                          }}
+                        >Share "{t.label}"</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {communityError && (
+                  <div style={{ fontSize: '11px', color: '#ef4444', padding: '4px 8px' }}>{communityError}</div>
+                )}
+
+                {communityThemes.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {communityThemes.map(item => (
+                      <div key={item.issueNumber} style={{
+                        padding: '8px', backgroundColor: '#1a1a1a', borderRadius: '6px',
+                        border: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', gap: '8px'
+                      }}>
+                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                          {item.previewColors.map((color, i) => (
+                            <div key={i} style={{
+                              width: '12px', height: '12px', borderRadius: '50%',
+                              backgroundColor: color, border: '1px solid rgba(255,255,255,0.1)'
+                            }} />
+                          ))}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '11px', color: '#e0e0e0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.name}
+                          </div>
+                          <div style={{ fontSize: '9px', color: '#666' }}>
+                            by {item.author}
+                          </div>
+                        </div>
+                        <div
+                          onClick={() => toggleThemeStar(item.issueNumber)}
+                          style={{ fontSize: '11px', color: item.isStarredByMe ? '#eab308' : '#555', cursor: 'pointer', flexShrink: 0 }}
+                          title={item.isStarredByMe ? 'Unstar' : 'Star'}
+                        >
+                          {item.isStarredByMe ? '\u2605' : '\u2606'} {item.stars}
+                        </div>
+                        <button
+                          onClick={() => downloadCommunityTheme(item)}
+                          style={{
+                            padding: '3px 8px', backgroundColor: '#333', color: '#e0e0e0',
+                            border: '1px solid #444', borderRadius: '4px', cursor: 'pointer',
+                            fontSize: '10px', flexShrink: 0
+                          }}
+                        >Get</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!communityLoading && communityThemes.length === 0 && !communityError && (
+                  <div style={{ fontSize: '11px', color: '#666', textAlign: 'center', padding: '12px' }}>
+                    No community themes shared yet. Be the first!
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Remote View section */}
