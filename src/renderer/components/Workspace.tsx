@@ -151,7 +151,7 @@ export function Workspace({
           y: w.y,
           width: w.width,
           height: w.height,
-          color: group?.color ?? '#888888'
+          color: agent?.theme?.chrome ?? group?.color ?? '#888888'
         }
       })
       window.electronAPI.syncWorkshopLayout(layouts)
