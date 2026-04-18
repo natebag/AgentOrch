@@ -324,6 +324,24 @@ async function enableRemoteView(): Promise<void> {
       for (const [id, entry] of workshopLayoutCache.entries()) out[id] = entry
       return out
     },
+    getPresets: () => {
+      try {
+        const names = listPresets()
+        return names.map(name => {
+          const p = loadPreset(name)
+          return {
+            name: p.name,
+            agentCount: p.agents.length,
+            agents: p.agents.map(a => ({ name: a.name, cli: a.cli, role: a.role }))
+          }
+        })
+      } catch {
+        return []
+      }
+    },
+    deleteInfoEntry: (id: string) => {
+      hub.infoChannel.deleteInfo(id)
+    },
   })
 
   const expressApp = remoteServer.getApp()
